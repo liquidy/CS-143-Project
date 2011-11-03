@@ -15,7 +15,6 @@ class Main:
         links = []
         throughputs = []
         sendRates = []
-        receiveRates = []
         packetDelays = []
         bufferOccs = []
         droppedPackets = []
@@ -29,14 +28,12 @@ class Main:
                 if nodes[id][1]:
                     sendRates.append(Monitor(name = 'Send Rate of Source %n' % id))
             elif nodes[id][4]:
-                thru = Monitor(name = 'Throughput of Source %n' % id)
+                thru = Monitor(name = 'Throughput to Destination %n' % id)
                 throughputs.append(thru)
-                receive = Monitor(name = 'Receiving Rate of Destination %n' % id)
                 pDelay = Monitor(name = 'Packet Delays of Destination %n' % id)              
-                devices[id] = Destination()
+                devices[id] = Destination(id, nodes[id][6],thru,pDelay)
                 activate(devices[id],devices[id].run())
                 if nodes[id][1]:
-                    receiveRates.append(receive)
                     packetDelays.append(pDelay)
             else:
                 buffOcc = Monitor(name = 'Buffer Occupancies of Router %n' % id)
@@ -76,13 +73,6 @@ class Main:
             plt.xlabel("Time")
             plt.ylabel("Bits per Second")
             plt.savefig("sendRate%n.png" % i)
-            
-        for m in receiveRates:
-            plt.plot(m.tseries(),m.yseries())
-            plt.title(m.name)
-            plt.xlabel("Time")
-            plt.ylabel("Bits per Second")
-            plt.savefig("receiveRate%n.png" % i)
             
         for m in packetDelays:
             plt.plot(m.tseries(),m.yseries())

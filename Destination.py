@@ -1,9 +1,9 @@
 from SimPy.Simulation import *
 import Device
 
-class Destination(Process, Device):
+class Destination(Device):
 
-    def __init__(self, ID, sourceID):
+    def __init__(self, ID, sourceID,throughput,packetDelay):
         super(self, ID) # call Device
         self.sourceID = sourceID
         self.numPacketsReceived = 0
@@ -12,6 +12,8 @@ class Destination(Process, Device):
         self.active = False
         self.receivedPackets = []  # stores all the rec'd packets
         self.currentAckPacketID = 0
+        self.throughput = throughput
+        self.packetDelay = packetDelay
 
 
     def addLink(self, link):
@@ -34,7 +36,9 @@ class Destination(Process, Device):
         # calculate the delay
         currDelay = receivedTime - packet.timeSent
         totalPacketDelay += currDelay
-
+        packetDelay.observe(totalPacketDelay/now())
+        throughput.observe(numPacketsReceived*packet.size/now())
+        
         # send ack
         acknowledge(packet)
         

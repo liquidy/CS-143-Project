@@ -1,8 +1,8 @@
 from SimPy.Simulation import *
 
-class Source(Process):
+class Source(Device):
 
-    def __init__(self, ID, destinationID, flowRate, bitsToSend, congestionAlgID):
+    def __init__(self, ID, destinationID, flowRate, bitsToSend, congestionAlgID,m):
         super(self, ID)
         self.destinationID = destinationID
         self.bitsToSend = bitsToSend
@@ -14,6 +14,8 @@ class Source(Process):
         self.outstandingPackets = {}
         self.link = None
         self.active = False
+        self.sendRateMonitor = m
+        self.numPacketsSent = 0
 
     def addLink(self, link):
         self.link = link
@@ -26,6 +28,8 @@ class Source(Process):
                 reactivate(link)
             packet = createPacket()
             self.sendPacket(packet)
+            numPacketsSent = numPacketsSent + 1
+            sendRateMonitor.observe(numPacketsSent/now())
             outstandingPackets[packet] = True;
             
     def createPacket(self):
