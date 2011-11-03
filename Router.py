@@ -8,7 +8,7 @@ class Router(Device):
         self.network = network
         self.bufferCapacity = cap
         self.buffer = []
-        self.busy = False
+        self.active = False
         # self.rerouting = False
         self.links = []  # to be filled by global initializer
         self.linkMap = [None] * len(self.network) # linkMap[i] is a link to node i
@@ -22,9 +22,9 @@ class Router(Device):
         self.dijkstra()
         while True:
             if len(self.buffer) == []:
-                self.busy = False
+                self.active = False
                 yield passivate, self
-            self.busy = True
+            self.active = True
             pkt = self.buffer.pop(0)
             dest = pkt.desID
             link = self.routingTable(desID)
