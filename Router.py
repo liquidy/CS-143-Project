@@ -85,4 +85,4 @@ class Router(Device):
             while node[0] is not self.id: 
                 node = paths[node[0]]
             # update routing table
-            self.routingTable[i] = self.linkMap[paths.indexof(node)]
+            self.routingTable[i] = self.linkMap[paths.index(node)]
