@@ -300,7 +300,7 @@ class Packet(Process):
             yield hold, self, self.propTime
             if not self.device.busy:
                 reactivate(self.device)
-                self.device.busy = True
+                self.device.active = True
             self.device.receivePacket(self)        
 
 # main takes the following arguments:
