@@ -2,15 +2,13 @@ from SimPy.Simulation import *
 
 class Link(Process):
 
-    def __init__(self,linkID, linkRate, start, end, propTime, price):
+    def __init__(self, linkRate, start, end, propTime):
         Process.__init__(self, name="Link"+str(linkID))
         self.queue = []
-        self.linkID = linkID
         self.linkRate = linkRate
         self.start = start
         self.end = end
         self.propTime = propTime
-        self.price = price
         self.active = False
 
     # if link is active, self.active = True, otherwise, self.active = False
@@ -22,9 +20,11 @@ class Link(Process):
                 self.active = False
                 yield passivate, self
             self.active = True
-            packet=self.queue.pop(0)
+            packet = self.queue.pop(0)
             # wait for trans time
             yield hold, self, packet.size/self.linkRate
             # packet start propagate in the link
-            packet.run(self.propTime, self.end)
+            packet.propTime = self.propTime
+            packet.device = self.end
+            reactivate(packet)
             print "t = %.2f: Job-%d departs" % (now(), packet.packetID)
