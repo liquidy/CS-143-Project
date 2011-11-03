@@ -125,13 +125,11 @@ class Router(Device):
         if not link.active:
             reactivate(link)
             link.active = True
-        link.queue.append(pkt)
+        if len(link.queue) < self.bufferCapacity:
+            link.queue.append(pkt)
             
     def receivePacket(self, pkt):
-        if len(self.buffer) < bufferCapacity:
             self.buffer.append(pkt)
-        else: # drop the packet
-            pkt.cancel()
     
     def addLink(self, link):
         self.links.append(link)
