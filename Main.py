@@ -2,6 +2,8 @@ from SimPy.Simulation import *
 import numpy as py
 import matplotlib.pyplot as plt
 
+PACKET_SIZE = 8000
+
 class Device(Process):
 
     def __init__(self, ID):
@@ -37,6 +39,7 @@ class Destination(Device):
         self.currentAckPacketID = 0
         self.throughput = throughput
         self.packetDelay = packetDelay
+        self.packet = None
 
 
     def addLink(self, link):
@@ -47,35 +50,39 @@ class Destination(Device):
     def run(self):
         while True:
             # passivate until receivePacket is called
+            self.active = False
             yield passivate, self
+            self.active = True
+            
+            assert(self.packet is not None)
+            
+            receivedTime = now()
+            self.receivedPackets.append((receivedTime, self.packet))
+            self.numPacketsReceived += 1
+            
+            currDelay = receivedTime - self.packet.timeSent
+            self.totalPacketDelay += currDelay
+            if not now() == 0:
+                self.packetDelay.observe(self.totalPacketDelay/float(now()))
+                self.throughput.observe(self.numPacketsReceived*self.packet.size/float(now()))
+                
+            self.acknowledge(self.packet)
+            
+            print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
             
             
     # called by link when it is time for packet to get to dest
     def receivePacket(self, packet):
-        receivedTime = now()
-        self.receivedPackets.append((receivedTime, packet)) # list holds (time, packet) tuples
-        self.numPacketsReceived += 1
-        
-        # calculate the delay
-        currDelay = receivedTime - packet.timeSent
-        self.totalPacketDelay += currDelay
-        if not now() == 0:
-            self.packetDelay.observe(self.totalPacketDelay/now())
-            self.throughput.observe(self.numPacketsReceived*packet.size/now())
-        
-        # send ack
-        acknowledge(packet)
-        
-        print 'Received packet: ' + packet.ID + ' at time ' + receivedTime
-        
-        # collect other stats: Ben?
-    
+        self.packet = packet
     
     # sends ack once it receives packet
-    def acknowledge(packet):
-        ack = createAckPacket()
+    def acknowledge(self, packet):
+        ack = self.createAckPacket()
 
         # send the ack packet (append it to this dest's link's queue)
+        if not self.link.active:
+            reactivate(self.link)
+            self.link.active = True
         self.link.queue.append(ack)
         
     
@@ -85,9 +92,10 @@ class Destination(Device):
 
         # need to instantiate monitor object to pass to ack packet
         newPacket = Packet(self.currentAckPacketID, now(), self.ID, 
-                           packet.sourceID, False, True, message, monitor)
+                           self.packet.sourceID, False, True, message)
 
         self.currentAckPacketID += 1
+        activate(newPacket, newPacket.run())
         return newPacket  
 
 class Router(Device):
@@ -178,7 +186,7 @@ class Router(Device):
 
 class Source(Device):
 
-    def __init__(self, ID, destinationID, flowRate, bitsToSend, congestionAlgID,m):
+    def __init__(self, ID, destinationID, flowRate, bitsToSend, congestionAlgID,monitor):
         Device.__init__(self, ID)
         self.destinationID = destinationID
         self.bitsToSend = bitsToSend
@@ -187,43 +195,51 @@ class Source(Device):
         self.roundTripTime = 0
         self.windowSize = 100
         self.currentPacketID = 0
-        self.outstandingPackets = {}
+        self.outstandingPackets = []
         self.link = None
         self.active = False
-        self.sendRateMonitor = m
+        self.sendRateMonitor = monitor
         self.numPacketsSent = 0
 
     def addLink(self, link):
         self.link = link
 
+    # TODO:  Create new timer process.  Source creates timer for each packet
+    # and passes it the packet's ID.  When the timer expires, if the packet has
+    # not been acknowledged, it creates a new packet with the same ID and sends
+    # it from the Source before resetting its time.  
+    #(secretly a congestion control process)
     def run(self):
-        while True:
+        while PACKET_SIZE*self.numPacketsSent < self.bitsToSend:
             if len(self.outstandingPackets) >= self.windowSize:
+                self.active = False
                 yield passivate, self
+            self.active = True
             if not self.link.active:
                 reactivate(self.link)
                 self.link.active = True
             packet = self.createPacket()
             self.sendPacket(packet)
-            self.numPacketsSent = self.numPacketsSent + 1
+            self.numPacketsSent += 1
             if not now() == 0:
-                self.sendRateMonitor.observe(self.numPacketsSent/now())
-            self.outstandingPackets[packet] = True;
+                self.sendRateMonitor.observe(self.numPacketsSent/float(now()))
+            self.outstandingPackets.append(packet.packetID)
             
     def createPacket(self):
         message = "Packet " + str(self.currentPacketID) + "'s data goes here!"
         newPacket = Packet(self.currentPacketID, now(), self.ID, 
                            self.destinationID, False, False, message)
         self.currentPacketID += 1
+        activate(newPacket, newPacket.run())
         return newPacket
     
     def sendPacket(self, packet):
-        link.queue.append(packet)
+        self.link.queue.append(packet)
         
     def receivePacket(self, packet):
         if not packet.isAck:
             return
-        del outstandingPackets[packet]
+        self.outstandingPackets.remove(packet.packetID)
 
 class Link(Process):
 
@@ -246,13 +262,14 @@ class Link(Process):
             if self.queue == []:
                 self.active = False
                 yield passivate, self
+            assert len(self.queue) > 0
             self.active = True
             packet = self.queue.pop(0)
             # wait for trans time
-            yield hold, self, packet.size/self.linkRate
-            self.packetsSent = self.packetsSent + 1
+            yield hold, self, packet.size/float(self.linkRate)
+            self.packetsSent += 1
             if not now() == 0:
-                self.monitor.observe(packet.size*self.packetsSent/now())
+                self.monitor.observe(packet.size*self.packetsSent/float(now()))
             # packet start propagate in the link
             packet.propTime = self.propTime
             packet.device = self.end
@@ -280,7 +297,7 @@ class Packet(Process):
     def __init__(self, packetID, timeSent, sourceID, desID, isRouterMesg, isAck, myMessage):
         Process.__init__(self, name="Packet"+str(packetID))
         self.packetID= packetID
-        self.size = 8000
+        self.size = PACKET_SIZE
         self.timeSent = timeSent
         self.sourceID = sourceID
         self.desID = desID
@@ -298,7 +315,7 @@ class Packet(Process):
         while True:
             yield passivate, self
             yield hold, self, self.propTime
-            if not self.device.busy:
+            if not self.device.active:
                 reactivate(self.device)
                 self.device.active = True
             self.device.receivePacket(self)        
@@ -360,46 +377,46 @@ for i in range(len(topology)):
                 
 simulate(until=1000000000)
 
-# Plot and save all the measurements. 
-for m in throughputs:
-    plt.plot(m.tseries(),m.yseries())
-    plt.title(m.name)
-    plt.xlabel("Time")
-    plt.ylabel("Bits per Second")
-    plt.savefig("throughput"+str(i)+".png")
+### Plot and save all the measurements. 
+#for m in throughputs:
+    #plt.plot(m.tseries(),m.yseries())
+    #plt.title(m.name)
+    #plt.xlabel("Time")
+    #plt.ylabel("Bits per Second")
+    #plt.savefig("throughput"+str(i)+".png")
     
-for m in sendRates:
-    plt.plot(m.tseries(),m.yseries())
-    plt.title(m.name)
-    plt.xlabel("Time")
-    plt.ylabel("Bits per Second")
-    plt.savefig("sendRate"+str(i)+".png")
+#for m in sendRates:
+    #plt.plot(m.tseries(),m.yseries())
+    #plt.title(m.name)
+    #plt.xlabel("Time")
+    #plt.ylabel("Bits per Second")
+    #plt.savefig("sendRate"+str(i)+".png")
     
-for m in packetDelays:
-    plt.plot(m.tseries(),m.yseries())
-    plt.title(m.name)
-    plt.xlabel("Time")
-    plt.ylabel("Time")
-    plt.savefig("packetDelay"+str(i)+".png")
+#for m in packetDelays:
+    #plt.plot(m.tseries(),m.yseries())
+    #plt.title(m.name)
+    #plt.xlabel("Time")
+    #plt.ylabel("Time")
+    #plt.savefig("packetDelay"+str(i)+".png")
     
-for m in bufferOccs:
-    plt.plot(m.tseries(),m.yseries())
-    plt.title(m.name)
-    plt.xlabel("Time")
-    plt.ylabel("Packets")
-    plt.savefig("bufferOccupancies"+str(i)+".png")
+#for m in bufferOccs:
+    #plt.plot(m.tseries(),m.yseries())
+    #plt.title(m.name)
+    #plt.xlabel("Time")
+    #plt.ylabel("Packets")
+    #plt.savefig("bufferOccupancies"+str(i)+".png")
     
-for m in droppedPackets:
-    plt.plot(m.tseries(),m.yseries())
-    plt.title(m.name)
-    plt.xlabel("Time")
-    plt.ylabel("Packets")
-    plt.savefig("droppedPackets"+str(i)+".png")
+#for m in droppedPackets:
+    #plt.plot(m.tseries(),m.yseries())
+    #plt.title(m.name)
+    #plt.xlabel("Time")
+    #plt.ylabel("Packets")
+    #plt.savefig("droppedPackets"+str(i)+".png")
     
-for m in linkFlowRates:
-    plt.plot(m.tseries(),m.yseries())
-    plt.title(m.name)
-    plt.xlabel("Time")
-    plt.ylabel("Bits per Second")
-    plt.savefig("linkSendRate" + str(i) +".png")
-print("done")
+#for m in linkFlowRates:
+    #plt.plot(m.tseries(),m.yseries())
+    #plt.title(m.name)
+    #plt.xlabel("Time")
+    #plt.ylabel("Bits per Second")
+    #plt.savefig("linkSendRate" + str(i) +".png")
+#print("done")
