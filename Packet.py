@@ -18,7 +18,7 @@ from SimPy.Simulation import *
 class Packet(Process):
     # To create a Packet(process), use p1 = Packet(1, 20, 1)
     # to create a packet with ID = 1, size = 20, timeSent = 1
-    def __init__(self, packetID, timeSent, sourceID, desID, isRouterMesg, isAck, myMessage, monitor):
+    def __init__(self, packetID, timeSent, sourceID, desID, isRouterMesg, isAck, myMessage):
         Process.__init__(self, name="Packet"+str(packetID))
         self.packetID= packetID
         self.size = 8000
@@ -28,7 +28,6 @@ class Packet(Process):
         self.isRouterMesg = isRouterMesg
         self.isAck = isAck
         self.myMessage = myMessage
-        self.monitor = monitor
         self.propTime = None
         self.device = None
         
