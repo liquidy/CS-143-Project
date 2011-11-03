@@ -18,26 +18,31 @@ from SimPy.Simulation import *
 class Packet(Process):
     # To create a Packet(process), use p1 = Packet(1, 20, 1)
     # to create a packet with ID = 1, size = 20, timeSent = 1
-    def __init__(self, packetID, size, timeSent, sourceID, desID, isRouterMesg, isAck, myMessage):
+    def __init__(self, packetID, timeSent, sourceID, desID, isRouterMesg, isAck, myMessage, monitor):
         Process.__init__(self, name="Packet"+str(packetID))
         self.packetID= packetID
-        self.size = size
+        self.size = 8000
         self.timeSent = timeSent
         self.sourceID = sourceID
         self.desID = desID
         self.isRouterMesg = isRouterMesg
         self.isAck = isAck
         self.myMessage = myMessage
+        self.monitor = monitor
+        self.propTime = None
+        self.device = None
         
     # to activate the process, call activate(p1, p1.run())
     # I understand why link should be active-passivate-active...
     # but I think packet could always stay active, I don't think I see
     # why we need to make it passivate and wake up again.
-    def run(self, propTime, device):
-        # reactivate(self)
-        yield hold, self, propTime
-        device.bufferEnqueue(self)
-        # yield passivate, self
+    def run(self):
+        while True:
+            yield passivate, self
+            yield hold, self, self.propTime
+            if not self.device.busy:
+                reactivate(device)
+            self.device.receivePacket(self)
         
     
         
