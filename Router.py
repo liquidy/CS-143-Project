@@ -37,7 +37,7 @@ class Router(Device):
         link.queue.append(pkt)
             
     def receivePacket(self, pkt):
-        if len(buffer) < bufferCapacity:
+        if len(self.buffer) < bufferCapacity:
             self.buffer.append(pkt)
         else: # drop the packet
             pkt.cancel()
@@ -47,7 +47,7 @@ class Router(Device):
         
     def mapLinks(self):
         for link in self.links:
-            linkMap[link.end] = link
+            self.linkMap[link.end] = link
     
     def dijkstra(self):
         # initialize a list of [predecessor, distance] pairs
