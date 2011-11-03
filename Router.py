@@ -1,5 +1,3 @@
-from SimPy.Simulation import *
-
 class Router(Device):
     
     # network - adjancency matrix of (monitored, link rate, propagation delay)
@@ -32,15 +30,14 @@ class Router(Device):
             # TODO: check for router messages
             
     def sendPacket(pkt, link):
-        if not link.active:
-            reactivate(link)
-        link.queue.append(pkt)
+        if len(link.queue) < self.bufferCapacity:
+            if not link.active:
+                reactivate(link)
+                link.active = True
+            link.queue.append(pkt)
             
     def receivePacket(self, pkt):
-        if len(self.buffer) < bufferCapacity:
             self.buffer.append(pkt)
-        else: # drop the packet
-            pkt.cancel()
     
     def addLink(self, link):
         self.links.append(link)
@@ -50,9 +47,9 @@ class Router(Device):
             self.linkMap[link.end] = link
     
     def dijkstra(self):
-        # initialize a list of [predecessor, distance] pairs
-        paths = [[None, None]] * len(self.network)
-        paths[self.id] = [self.id, 0]
+        # initialize a list of (predecessor, distance) pairs
+        paths = [(None, None)] * len(self.network)
+        paths[self.ID] = (self.ID, 0)
         # initialize a list of IDs of undiscovered nodes
         left = []
         for i in range(len(self.network)):
@@ -74,15 +71,15 @@ class Router(Device):
             for i in range(len(self.network)):
                 link = self.network[nextNode][i]
                 if len(link) == 3: # if a link exists between nextNode and node i
+                    print link
                     dist = minDist + link[2]
-                    if dist < paths[i][1]: # if we found a shorter path to node i
-                        paths[i][0] = nextNode
-                        paths[i][1] = dist
+                    if dist < paths[i][1] or paths[i][1] == None: # if we found a shorter path to node i
+                        paths[i] = (nextNode, dist)
         
         for i in range(len(paths)):
             node = paths[i]
             # find next step toward node i from self
-            while node[0] is not self.id: 
+            while node[0] is not self.ID: 
                 node = paths[node[0]]
             # update routing table
             self.routingTable[i] = self.linkMap[paths.index(node)]
