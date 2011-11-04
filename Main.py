@@ -4,6 +4,28 @@ import matplotlib.pyplot as plt
 
 PACKET_SIZE = 8000
 
+class Device(Process):
+
+    def __init__(self, ID):
+        Process.__init__(self, name="Device" + str(ID))
+        self.ID = ID
+
+    def run(self):
+        # Implementation left to subclasses
+        pass
+    
+    def addLink(self, link):
+        # Implementation left to subclasses
+        pass
+     
+    def receivePacket(self, packet):
+        # Implementation left to subclasses
+        pass
+    
+    def sendPacket(self, packet, link):
+        # Implementation left to subclasses
+        pass
+
 class Destination(Device):
 
     def __init__(self, ID, sourceID, throughput, packetDelay):
@@ -71,28 +93,6 @@ class Destination(Device):
         self.currentAckPacketID += 1
         activate(newPacket, newPacket.run())
         return newPacket  
-
-class Device(Process):
-
-    def __init__(self, ID):
-        Process.__init__(self, name="Device" + str(ID))
-        self.ID = ID
-
-    def run(self):
-        # Implementation left to subclasses
-        pass
-    
-    def addLink(self, link):
-        # Implementation left to subclasses
-        pass
-     
-    def receivePacket(self, packet):
-        # Implementation left to subclasses
-        pass
-    
-    def sendPacket(self, packet, link):
-        # Implementation left to subclasses
-        pass
 
 class Link(Process):
 
