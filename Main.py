@@ -68,7 +68,7 @@ class Destination(Device):
             currDelay = receivedTime - self.packet.timeSent
             self.totalPacketDelay += currDelay
             if not now() == 0:
-                self.packetDelay.observe(self.totalPacketDelay / float(now()))
+                self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
                 self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
                 
             self.acknowledge(self.packet)
@@ -105,13 +105,14 @@ class Destination(Device):
 
 class Link(Process):
 
-    def __init__(self, linkRate, start, end, propTime, buffMonitor, dropMonitor, flowMonitor):
+    def __init__(self, linkRate, start, end, propTime, bufferCapacity, buffMonitor, dropMonitor, flowMonitor):
         Process.__init__(self)
         self.queue = []
         self.linkRate = linkRate
         self.start = start
         self.end = end
         self.propTime = propTime
+        self.bufferCapacity = bufferCapacity
         self.buffMonitor = buffMonitor
         self.dropMonitor = dropMonitor
         self.flowMonitor = flowMonitor
@@ -190,10 +191,9 @@ class Packet(Process):
 class Router(Device):
     
     # network - adjancency matrix of (monitored, link rate, propagation delay)
-    def __init__(self, id, network, cap):
+    def __init__(self, id, network):
         Device.__init__(self, id)
         self.network = network
-        self.bufferCapacity = cap
         self.buffer = []
         self.active = False
         # self.rerouting = False
@@ -221,7 +221,7 @@ class Router(Device):
             # TODO: check for router messages
             
     def sendPacket(self, pkt, link):
-        if len(link.queue) < self.bufferCapacity:
+        if len(link.queue) < link.bufferCapacity:
             if not link.active:
                 reactivate(link)
                 link.active = True
@@ -265,7 +265,7 @@ class Router(Device):
             left.remove(nextNode)
             for i in range(len(self.network)):
                 link = self.network[nextNode][i]
-                if len(link) == 3: # if a link exists between nextNode and node i
+                if len(link) > 1: # if a link exists between nextNode and node i
                     dist = minDist + link[2]
                     if dist < paths[i][1] or paths[i][1] == None: # if we found a shorter path to node i
                         paths[i] = (nextNode, dist, i)
@@ -281,11 +281,10 @@ class Router(Device):
 # Source
 class Source(Device):
 
-    def __init__(self, ID, destinationID, flowRate, bitsToSend, congestionAlgID, monitor):
+    def __init__(self, ID, destinationID, bitsToSend, congestionAlgID, monitor):
         Device.__init__(self, ID)
         self.destinationID = destinationID
         self.bitsToSend = bitsToSend
-        self.flowRate = flowRate
         self.congestionAlgID = congestionAlgID
         self.roundTripTime = 0
         self.windowSize = 1000
@@ -321,8 +320,13 @@ class Source(Device):
                     if not now() == 0:
                         self.link.buffMonitor.observe(len(self.link.queue))
                         self.link.dropMonitor.observe(self.link.droppedPackets)
+                        if now() > 2000:
+                            star = 1
                         self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
-            # otherwise, nothing to resend
+            # If everything has been sent, go to sleep
+            elif (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
+                yield passivate, self            
+            # otherwise, send new packets!
             elif len(self.outstandingPackets) < self.windowSize:
                 # send a new packet
                 packet = self.createPacket()     
@@ -335,6 +339,8 @@ class Source(Device):
                 if not now() == 0:
                     self.link.buffMonitor.observe(len(self.link.queue))
                     self.link.dropMonitor.observe(self.link.droppedPackets)
+                    if now() > 2000:
+                        star = 1
                     self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
             # nothing to retransmit and cannot send new packets
             else:
@@ -447,14 +453,14 @@ class Timer(Process):
 # MAIN STARTS HERE
 
 # main takes the following arguments:
-# topology[][][], a 3-way array with topology[i][j] being the list [monitored, rate, propogation delay] for the link between nodes i and j, 
+# topology[][][], a 3-way array with topology[i][j] being the list [monitored, rate, propogation delay, buffer capacity] for the link between nodes i and j, 
 #   and -1 if one does not exist
 # nodes[][], a 2-way array with nodes[i] being the list 
-#   [monitored, bufferCapacity, isSource, isDest, sourceID, destID, flowrate, numbits, congID, starttime]
+#   [monitored, isSource, isDest, sourceID, destID, numbits, congID, starttime, bufferCapacity]
 
 initialize()
-topology = [[[-1],[-1],[1, 10000, 15]], [[-1],[-1],[1, 10000, 15]], [[1,10000,15],[1,10000,15],[-1]]]
-nodes = [[1, 64000, 1, 0, 0, 1, 500, 10000000, 0, 0], [1, 64000, 0, 1, 0, 1, 500, 0, 0, 0],[0,64,0,0]]
+topology = [[[-1],[-1],[1, 10000, 15, 64]], [[-1],[-1],[1, 10000, 15, 64]], [[1, 10000, 15, 64],[1, 10000, 15, 64],[-1]]]
+nodes = [[1, 1, 0, 0, 1, 10000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0]]
 devices = []
 links = []
 throughputs = []
@@ -465,22 +471,22 @@ droppedPackets = []
 linkFlowRates = []
 #For each device in the nodes, instantiate the appropriate device with its monitors
 for id in range(len(nodes)):
-    if nodes[id][2]:
+    if nodes[id][1]:
         m = Monitor(name = 'Send Rate of Source ' + str(id))
-        devices.append(Source(id, nodes[id][5], nodes[id][6], nodes[id][7], nodes[id][8], m))
-        activate(devices[id], devices[id].run(), at=nodes[id][9])
+        devices.append(Source(id, nodes[id][4], nodes[id][5], nodes[id][6], m))
+        activate(devices[id], devices[id].run(), at=nodes[id][7])
         if nodes[id][0]:
             sendRates.append(m)
-    elif nodes[id][3]:
+    elif nodes[id][2]:
         thru = Monitor(name = 'Throughput to Destination ' + str(id))
         throughputs.append(thru)
         pDelay = Monitor(name = 'Packet Delays of Destination ' + str(id))              
-        devices.append(Destination(id, nodes[id][5], thru, pDelay))
+        devices.append(Destination(id, nodes[id][3], thru, pDelay))
         activate(devices[id], devices[id].run())
         if nodes[id][0]:
             packetDelays.append(pDelay)
     else:                  
-        devices.append(Router(id, topology, nodes[id][1]))
+        devices.append(Router(id, topology))
         activate(devices[id], devices[id].run())       
                             
 #For each link in the topology, instantiate the appropriate link with its monitors
@@ -494,12 +500,12 @@ for i in range(len(topology)):
                 linkFlowRates.append(flowRate)
                 bufferOccs.append(buffOcc)
                 droppedPackets.append(dropPacket)
-            link = Link(topology[i][j][1], devices[i], devices[j], topology[i][j][2], buffOcc, dropPacket, flowRate)
+            link = Link(topology[i][j][1], devices[i], devices[j], topology[i][j][2], topology[i][j][3], buffOcc, dropPacket, flowRate)
             activate(link, link.run())
             links.append(link)
             devices[i].addLink(link)
                 
-simulate(until = 10000)
+simulate(until = 3000)
 
 ### Plot and save all the measurements. 
 n = 0
