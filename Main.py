@@ -26,6 +26,7 @@ class Device(Process):
         # Implementation left to subclasses
         pass
 
+# Destination
 class Destination(Device):
 
     def __init__(self, ID, sourceID, throughput, packetDelay):
@@ -46,11 +47,8 @@ class Destination(Device):
         
     # process packets as they arrive
     def run(self):
-        self.active = True
         while True:
             # passivate until receivePacket is called
-            self.link.buffMonitor.observe(len(self.link.queue))
-            self.link.dropMonitor.observe(self.link.droppedPackets)
             self.active = False
             yield passivate, self
             self.active = True
@@ -64,7 +62,7 @@ class Destination(Device):
             currDelay = receivedTime - self.packet.timeSent
             self.totalPacketDelay += currDelay
             if not now() == 0:
-                self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
+                self.packetDelay.observe(self.totalPacketDelay / float(now()))
                 self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
                 
             self.acknowledge(self.packet)
@@ -95,7 +93,9 @@ class Destination(Device):
 
         self.currentAckPacketID += 1
         activate(newPacket, newPacket.run())
-        return newPacket  
+        return newPacket 
+            
+
 
 class Link(Process):
 
@@ -272,6 +272,7 @@ class Router(Device):
             # update routing table
             self.routingTable[i] = self.linkMap[node[2]]
 
+# Source
 class Source(Device):
 
     def __init__(self, ID, destinationID, flowRate, bitsToSend, congestionAlgID, monitor):
@@ -281,13 +282,17 @@ class Source(Device):
         self.flowRate = flowRate
         self.congestionAlgID = congestionAlgID
         self.roundTripTime = 0
-        self.windowSize = 10000000
+        self.windowSize = 10
         self.currentPacketID = 0
         self.outstandingPackets = {}
+        self.toRetransmit = []
         self.link = None
         self.active = False
         self.sendRateMonitor = monitor
+        self.numMissingAcks = 5
+        self.missingAck = 0
         self.numPacketsSent = 0
+        self.timeout = 100 # NEED TO ESTIMATE LATER
 
     def addLink(self, link):
         self.link = link
@@ -297,23 +302,30 @@ class Source(Device):
     # not been acknowledged, it creates a new packet with the same ID and sends
     # it from the Source before resetting its time.  
     #(secretly a congestion control process)
+    
     def run(self):
         self.active = True
-        while PACKET_SIZE * self.numPacketsSent < self.bitsToSend:
-            if len(self.outstandingPackets) >= self.windowSize:                
-                self.active = False                
+        while True:
+            # resend anything, if need to
+            if len(self.toRetransmit) > 0:
+                (didtransmit, p) = self.retransmitPacket()
+                if (didtransmit):  # if transmitted, wait
+                    yield hold, self, p.size/float(self.link.linkRate)
+            # otherwise, nothing to resend
+            elif len(self.outstandingPackets) < self.windowSize:
+                # send a new packet
+                packet = self.createPacket()     
+                self.sendPacket(packet)
+                # wait
+                yield hold, self, packet.size/float(self.link.linkRate)
+                # collect stats
+                if not now() == 0:
+                    self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
+            # nothing to retransmit and cannot send new packets
+            else:
+                self.active = False
                 yield passivate, self
                 self.active = True
-            if not self.link.active:
-                reactivate(self.link)
-                self.link.active = True
-            packet = self.createPacket()
-            self.sendPacket(packet)
-            self.link.buffMonitor.observe(len(self.link.queue))
-            self.link.dropMonitor.observe(self.link.droppedPackets)
-            yield hold, self, packet.size/float(self.link.linkRate)
-            if not now() == 0:
-                self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
             
     def createPacket(self):
         message = "Packet " + str(self.currentPacketID) + "'s data goes here!"
@@ -323,14 +335,99 @@ class Source(Device):
         activate(newPacket, newPacket.run())
         return newPacket
     
+    # figures out if we need to retransmit anything, and retransmits it if so
+    def retransmitPacket(self):
+        packet = None       # the packet to send
+        # check if we need to resend anything, do nothing if nothing to resend
+        if len(self.toRetransmit) > 0:
+            # keep popping packets off toRetr until we find one that is outstanding
+            while len(self.toRetransmit) > 0:
+                pack = self.toRetransmit.pop()
+                #print 'size: ' + str(len(self.toRetransmit))
+                if (pack in self.outstandingPackets):
+                    packet = pack
+                    break
+            if (packet != None):
+                # have a single packet which we need to resend
+                packet.timeSent = now()        
+                self.sendPacketAgain(packet)
+                return (True, packet)
+        return (False, None)
+            
+    
     def sendPacket(self, packet):
-        self.numPacketsSent += 1
-        self.outstandingPackets[packet.packetID] = True
-        self.link.queue.append(packet)
+        if (PACKET_SIZE * self.numPacketsSent < self.bitsToSend):
+            self.numPacketsSent += 1
+            self.outstandingPackets[packet.packetID] = True
+            if (self.link.active is not True):
+                reactivate(self.link)
+                self.link.active = True
+            self.link.queue.append(packet)
+            # create the timer for this packet
+            t = Timer(packet, self.timeout, self)
+            activate(t, t.run())
+    
+    def sendPacketAgain(self, packet):
+        if (PACKET_SIZE * self.numPacketsSent < self.bitsToSend):
+            self.outstandingPackets[packet.packetID] = True
+            if (self.link.active is not True):
+                reactivate(self.link)
+                self.link.active = True 
+            self.link.queue.append(packet)
+            # create the timer for this packet
+            t = Timer(packet, self.timeout, self)
+            activate(t, t.run())
+        
         
     def receivePacket(self, packet):
-        if packet.isAck:
+        if packet.isAck and packet.packetID in self.outstandingPackets:
+            self.windowSize += 1/float(math.floor(self.windowSize))
             del self.outstandingPackets[packet.packetID]
+            print 'Ack received. ID: ' + str(packet.packetID)
+       
+       
+# Timer
+# this is called every time a packet is sent. it waits the timeout
+# set by the source, then resends packet while it is in list of outst 
+# packets. once it is no longer in that list, just passivate     
+class Timer(Process):
+    # packet is the packet for which this timer is associated with
+    # time is the length of time before timer times out
+    # source is the object which sends the packets
+    def __init__(self, packet, time, source):
+        Process.__init__(self, name="Timer" + str(packet.packetID))
+        self.packet = packet
+        self.time = time
+        self.source = source 
+    
+    def run(self):
+        #print 'timer starting, packet id: ' + str(self.packet.packetID)
+        yield hold, self, self.time
+        #print 'timer went off'
+        # while we havent received an ack for the packet
+        if self.packet.packetID in self.source.outstandingPackets:  
+            self.source.missingAck += 1
+            if (self.source.missingAck == self.source.numMissingAcks):
+                self.source.windowSize = self.source.windowSize / 2
+            # add packet to source's queue
+            self.source.toRetransmit.append(self.createPacket(self.packet))
+            if not self.source.active:
+                self.source.active = True
+                reactivate(self.source)
+            print 'Retransmitting packet ' + str(self.packet.packetID) + ' at time: ' + str(now())
+        #print 'here: ' + str(self.packet.packetID)
+        yield passivate, self
+            
+    # copy of packet with this id
+    def createPacket(self, packet):
+        message = "Packet " + str(packet.packetID) + "'s data goes here!"
+        # packetId, timesent, sourceID, destid, isroutermsg, isack, msg 
+        newPacket = Packet(packet.packetID, now(), packet.sourceID, 
+                           packet.desID, packet.isRouterMesg, packet.isAck, message)
+        activate(newPacket, newPacket.run())
+        return newPacket
+    
+
             
 # MAIN STARTS HERE
 
