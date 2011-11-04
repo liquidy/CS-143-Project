@@ -48,6 +48,8 @@ class Destination(Device):
     def run(self):
         while True:
             # passivate until receivePacket is called
+            self.link.buffMonitor.observe(len(self.link.queue))
+            self.link.dropMonitor.observe(self.link.droppedPackets)
             self.active = False
             yield passivate, self
             self.active = True
@@ -61,12 +63,12 @@ class Destination(Device):
             currDelay = receivedTime - self.packet.timeSent
             self.totalPacketDelay += currDelay
             if not now() == 0:
-                self.packetDelay.observe(self.totalPacketDelay / float(now()))
+                self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
                 self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
                 
             self.acknowledge(self.packet)
             
-            print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime) + ' info: ' + self.packet.myMessage
+            print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
             
     # called by link when it is time for packet to get to dest
     def receivePacket(self, packet):
@@ -96,14 +98,17 @@ class Destination(Device):
 
 class Link(Process):
 
-    def __init__(self, linkRate, start, end, propTime, monitor):
+    def __init__(self, linkRate, start, end, propTime, buffMonitor, dropMonitor, flowMonitor):
         Process.__init__(self)
         self.queue = []
         self.linkRate = linkRate
         self.start = start
         self.end = end
         self.propTime = propTime
-        self.monitor = monitor
+        self.buffMonitor = buffMonitor
+        self.dropMonitor = dropMonitor
+        self.flowMonitor = flowMonitor
+        self.droppedPackets = 0
         self.packetsSent = 0        
         self.active = False
 
@@ -123,7 +128,7 @@ class Link(Process):
             yield hold, self, packet.size / float(self.linkRate)
             self.packetsSent += 1
             if not now() == 0:
-                self.monitor.observe(packet.size * self.packetsSent / float(now()))
+                self.flowMonitor.observe(packet.size * self.packetsSent / float(now()))
             # packet start propagate in the link
             packet.propTime = self.propTime
             packet.device = self.end
@@ -177,7 +182,7 @@ class Packet(Process):
 class Router(Device):
     
     # network - adjancency matrix of (monitored, link rate, propagation delay)
-    def __init__(self, id, network, cap, bufferMonitor, dropMonitor):
+    def __init__(self, id, network, cap):
         Device.__init__(self, id)
         self.network = network
         self.bufferCapacity = cap
@@ -188,20 +193,21 @@ class Router(Device):
         self.linkMap = [None] * len(self.network) # linkMap[i] is a link to node i
         # self.delays = []
         self.routingTable = [None] * len(self.network)
-        self.bufferMonitor = bufferMonitor
-        self.dropMonitor = dropMonitor
     
     def run(self):
         self.mapLinks()
         self.dijkstra()
         while True:
-            if len(self.buffer) == []:
+            if len(self.buffer) == 0:
+                for link in self.links:
+                    link.buffMonitor.observe(len(link.queue))
+                    link.dropMonitor.observe(link.droppedPackets)   
                 self.active = False
                 yield passivate, self
                 self.active = True
             pkt = self.buffer.pop(0)
             dest = pkt.desID
-            link = self.routingTable(dest)
+            link = self.routingTable[dest]
             self.sendPacket(pkt, link)
             # TODO: check for router messages
             
@@ -211,6 +217,8 @@ class Router(Device):
                 reactivate(link)
                 link.active = True
             link.queue.append(pkt)
+        else:
+            link.droppedPackets += 1
             
     def receivePacket(self, pkt):
             self.buffer.append(pkt)
@@ -220,12 +228,14 @@ class Router(Device):
         
     def mapLinks(self):
         for link in self.links:
-            self.linkMap[link.end] = link
+            self.linkMap[link.end.ID] = link
     
     def dijkstra(self):
-        # initialize a list of (predecessor, distance) pairs
-        paths = [(None, None)] * len(self.network)
-        paths[self.ID] = (self.ID, 0)
+        # initialize a list of (predecessor, distance, deviceID) triples
+        paths = []
+        for i in range(len(self.network)):
+            paths.append((None, None, i))
+        paths[self.ID] = (self.ID, 0, self.ID)
         # initialize a list of IDs of undiscovered nodes
         left = []
         for i in range(len(self.network)):
@@ -247,10 +257,9 @@ class Router(Device):
             for i in range(len(self.network)):
                 link = self.network[nextNode][i]
                 if len(link) == 3: # if a link exists between nextNode and node i
-                    print link
                     dist = minDist + link[2]
                     if dist < paths[i][1] or paths[i][1] == None: # if we found a shorter path to node i
-                        paths[i] = (nextNode, dist)
+                        paths[i] = (nextNode, dist, i)
         
         for i in range(len(paths)):
             node = paths[i]
@@ -258,7 +267,7 @@ class Router(Device):
             while node[0] is not self.ID: 
                 node = paths[node[0]]
             # update routing table
-            self.routingTable[i] = self.linkMap[paths.index(node)]
+            self.routingTable[i] = self.linkMap[node[2]]
 
 class Source(Device):
 
@@ -269,7 +278,7 @@ class Source(Device):
         self.flowRate = flowRate
         self.congestionAlgID = congestionAlgID
         self.roundTripTime = 0
-        self.windowSize = 100000000000
+        self.windowSize = 10000000
         self.currentPacketID = 0
         self.outstandingPackets = {}
         self.link = None
@@ -286,9 +295,10 @@ class Source(Device):
     # it from the Source before resetting its time.  
     #(secretly a congestion control process)
     def run(self):
+        self.active = True
         while PACKET_SIZE * self.numPacketsSent < self.bitsToSend:
-            if len(self.outstandingPackets) >= self.windowSize:
-                self.active = False
+            if len(self.outstandingPackets) >= self.windowSize:                
+                self.active = False                
                 yield passivate, self
                 self.active = True
             if not self.link.active:
@@ -296,6 +306,8 @@ class Source(Device):
                 self.link.active = True
             packet = self.createPacket()
             self.sendPacket(packet)
+            self.link.buffMonitor.observe(len(self.link.queue))
+            self.link.dropMonitor.observe(self.link.droppedPackets)
             yield hold, self, packet.size/float(self.link.linkRate)
             if not now() == 0:
                 self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
@@ -326,8 +338,8 @@ class Source(Device):
 #   [monitored, bufferCapacity, isSource, isDest, sourceID, destID, flowrate, numbits, congID, starttime]
 
 initialize()
-topology = [[[-1], [1, 10000, 15]], [[1, 10000, 15], [-1]]]
-nodes = [[1, 64000, 1, 0, 0, 1, 500, 10000000, 0, 0], [1, 64000, 0, 1, 0, 1, 500, 0, 0, 0]]
+topology = [[[-1],[-1],[1, 10000, 15]], [[-1],[-1],[1, 10000, 15]], [[1,10000,15],[1,10000,15],[-1]]]
+nodes = [[1, 64000, 1, 0, 0, 1, 500, 10000000, 0, 0], [1, 64000, 0, 1, 0, 1, 500, 0, 0, 0],[0,64,0,0]]
 devices = []
 links = []
 throughputs = []
@@ -339,7 +351,7 @@ linkFlowRates = []
 #For each device in the nodes, instantiate the appropriate device with its monitors
 for id in range(len(nodes)):
     if nodes[id][2]:
-        m = Monitor(name = 'Send Rate of Source ' + str(id) + 'v1')
+        m = Monitor(name = 'Send Rate of Source ' + str(id))
         devices.append(Source(id, nodes[id][5], nodes[id][6], nodes[id][7], nodes[id][8], m))
         activate(devices[id], devices[id].run(), at=nodes[id][9])
         if nodes[id][0]:
@@ -352,24 +364,22 @@ for id in range(len(nodes)):
         activate(devices[id], devices[id].run())
         if nodes[id][0]:
             packetDelays.append(pDelay)
-    else:
-        buffOcc = Monitor(name = 'Buffer Occupancies of Router '  + str(id))
-        dropPacket = Monitor(name = 'Dropped Packets of Router ' + str(id))                    
-        devices.append(Router(id, topology, nodes[id][1], buffOcc, dropPacket))
-        activate(devices[id], devices[id].run())
-        if nodes[id][0]:
-            bufferOccs.append(Monitor(buffOcc))
-            droppedPackets.append(dropPacket)
-        
+    else:                  
+        devices.append(Router(id, topology, nodes[id][1]))
+        activate(devices[id], devices[id].run())       
                             
 #For each link in the topology, instantiate the appropriate link with its monitors
 for i in range(len(topology)):
     for j in range(len(topology[i])):
         if len(topology[i][j]) > 1:
             if topology[i][j][0]:
-                flowRate = Monitor(name = 'Link Flow Rate of the Link Between Devices ' + str(i) + ' and ' + str(j))
+                buffOcc = Monitor(name = 'Buffer Occupancies of the Link From '  + str(i) + ' to ' + str(j))
+                dropPacket = Monitor(name = 'Dropped Packets of the Link From '  + str(i) + ' to ' + str(j))  
+                flowRate = Monitor(name = 'Link Flow Rate of the Link From '  + str(i) + ' to ' + str(j))
                 linkFlowRates.append(flowRate)
-            link = Link(topology[i][j][1], devices[i], devices[j], topology[i][j][2], flowRate)
+                bufferOccs.append(buffOcc)
+                droppedPackets.append(dropPacket)
+            link = Link(topology[i][j][1], devices[i], devices[j], topology[i][j][2], buffOcc, dropPacket, flowRate)
             activate(link, link.run())
             links.append(link)
             devices[i].addLink(link)
@@ -378,50 +388,50 @@ simulate(until=1000000000)
 
 ### Plot and save all the measurements. 
 for m in throughputs:
-    plt.plot(m.tseries(), m.yseries())
+    plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
-    plt.savefig("throughput" + str(i) + ".png")
+    plt.savefig("top2throughput" + str(i) + ".png")
     plt.clf()
     
 for m in sendRates:
-    plt.plot(m.tseries(), m.yseries())
+    plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
-    plt.savefig("sendRate" + str(i) + ".png")
+    plt.savefig("top2sendRate" + str(i) + ".png")
     plt.clf()
     
 for m in packetDelays:
-    plt.plot(m.tseries(), m.yseries())
+    plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Time")
-    plt.savefig("packetDelay" + str(i) + ".png")
+    plt.savefig("top2packetDelay" + str(i) + ".png")
     plt.clf()
     
 for m in bufferOccs:
-    plt.plot(m.tseries(), m.yseries())
+    plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Packets")
-    plt.savefig("bufferOccupancies" + str(i) + ".png")
+    plt.savefig("top2bufferOccupancies" + str(i) + ".png")
     plt.clf()
     
 for m in droppedPackets:
-    plt.plot(m.tseries(), m.yseries())
+    plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Packets")
-    plt.savefig("droppedPackets" + str(i) + ".png")
+    plt.savefig("top2droppedPackets" + str(i) + ".png")
     plt.clf()
     
 for m in linkFlowRates:
-    plt.plot(m.tseries(), m.yseries())
+    plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
-    plt.savefig("linkSendRate" + str(i)  + ".png")
+    plt.savefig("top2linkSendRate" + str(i)  + ".png")
     plt.clf()
 print("done")
