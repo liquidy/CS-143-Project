@@ -390,51 +390,64 @@ for i in range(len(topology)):
 simulate(until=1000000000)
 
 ### Plot and save all the measurements. 
+n = 0
 for m in throughputs:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
-    plt.savefig("top2throughput" + str(i) + ".png")
+    plt.savefig("top2throughput" + str(n) + ".png")
     plt.clf()
+    n += 1
     
+n = 0
 for m in sendRates:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
-    plt.savefig("top2sendRate" + str(i) + ".png")
+    plt.savefig("top2sendRate" + str(n) + ".png")
     plt.clf()
-    
+    n += 1
+
+n = 0
 for m in packetDelays:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Time")
-    plt.savefig("top2packetDelay" + str(i) + ".png")
+    plt.savefig("top2packetDelay" + str(n) + ".png")
     plt.clf()
+    n += 1
     
+n = 0
 for m in bufferOccs:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Packets")
-    plt.savefig("top2bufferOccupancies" + str(i) + ".png")
+    plt.savefig("top2bufferOccupancies" + str(n) + ".png")
     plt.clf()
+    n += 1
     
+n = 0
 for m in droppedPackets:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Packets")
-    plt.savefig("top2droppedPackets" + str(i) + ".png")
+    plt.savefig("top2droppedPackets" + str(n) + ".png")
     plt.clf()
+    n += 1
     
+n = 0
 for m in linkFlowRates:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
-    plt.savefig("top2linkSendRate" + str(i)  + ".png")
+    plt.savefig("top2linkSendRate" + str(n)  + ".png")
     plt.clf()
+    n += 1
+
 print("done")
