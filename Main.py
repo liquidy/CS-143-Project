@@ -1,6 +1,7 @@
 from SimPy.Simulation import * 
 import numpy as py
 import matplotlib.pyplot as plt
+import math
 
 PACKET_SIZE = 8000
 
@@ -47,11 +48,16 @@ class Destination(Device):
         
     # process packets as they arrive
     def run(self):
+        self.active = True
         while True:
             # passivate until receivePacket is called
             self.active = False
             yield passivate, self
             self.active = True
+            
+            # collect stats
+            self.link.buffMonitor.observe(len(self.link.queue))
+            self.link.dropMonitor.observe(self.link.droppedPackets)
             
             assert(self.packet is not None)
             
@@ -282,7 +288,7 @@ class Source(Device):
         self.flowRate = flowRate
         self.congestionAlgID = congestionAlgID
         self.roundTripTime = 0
-        self.windowSize = 10
+        self.windowSize = 1000
         self.currentPacketID = 0
         self.outstandingPackets = {}
         self.toRetransmit = []
@@ -311,6 +317,11 @@ class Source(Device):
                 (didtransmit, p) = self.retransmitPacket()
                 if (didtransmit):  # if transmitted, wait
                     yield hold, self, p.size/float(self.link.linkRate)
+                    # collect stats
+                    if not now() == 0:
+                        self.link.buffMonitor.observe(len(self.link.queue))
+                        self.link.dropMonitor.observe(self.link.droppedPackets)
+                        self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
             # otherwise, nothing to resend
             elif len(self.outstandingPackets) < self.windowSize:
                 # send a new packet
@@ -319,7 +330,11 @@ class Source(Device):
                 # wait
                 yield hold, self, packet.size/float(self.link.linkRate)
                 # collect stats
+                if now() > 7:
+                    srat = 1
                 if not now() == 0:
+                    self.link.buffMonitor.observe(len(self.link.queue))
+                    self.link.dropMonitor.observe(self.link.droppedPackets)
                     self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
             # nothing to retransmit and cannot send new packets
             else:
@@ -484,7 +499,7 @@ for i in range(len(topology)):
             links.append(link)
             devices[i].addLink(link)
                 
-simulate(until=1000000000)
+simulate(until = 10000)
 
 ### Plot and save all the measurements. 
 n = 0
