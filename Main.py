@@ -66,7 +66,7 @@ class Destination(Device):
                 
             self.acknowledge(self.packet)
             
-            print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
+            print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime) + ' info: ' + self.packet.myMessage
             
     # called by link when it is time for packet to get to dest
     def receivePacket(self, packet):
