@@ -296,7 +296,7 @@ class Source(Device):
                 self.link.active = True
             packet = self.createPacket()
             self.sendPacket(packet)
-
+            yield hold, self, packet.size/float(self.link.linkRate)
             if not now() == 0:
                 self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
             
