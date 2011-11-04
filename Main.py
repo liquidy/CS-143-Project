@@ -107,6 +107,9 @@ class Link(Process):
         self.packetsSent = 0        
         self.active = False
 
+    # if link is active, self.active = True, otherwise, self.active = False
+    # Source can use this attribute to decide if it needs to reactivate the  
+    # link
     def run(self):
         while True:
             if self.queue == []:
@@ -127,8 +130,24 @@ class Link(Process):
             reactivate(packet)
             print "t = %.2f: Job-%d departs" % (now(), packet.packetID)        
 
+#packet:
+#- packet is a process
+#- source creates packet object (at first packet is not activated), enqueues it in the #link
+#- link then tells it where it is going (in terms of next device) and tells it how long #to wait, and then activates the packet
+#- packet waits for the needed time
+#- once it has waited for that time it enqueues itself in that appropriate device #(router) and goes to sleep
+#- packet needs public router object
+#- when packet wakes up, it is because a link has reactivated it
+
+#Packet:
+#- int ID, int size, int timeSent
+#- int sourceID, int destinationID
+#- Boolean isRouterMessage, Boolean acknowledgement
+#- Object Message (RouterMessage, Other)
+
 class Packet(Process):
-    
+    # To create a Packet(process), use p1 = Packet(1, 20, 1)
+    # to create a packet with ID = 1, size = 20, timeSent = 1
     def __init__(self, packetID, timeSent, sourceID, desID, isRouterMesg, isAck, myMessage):
         Process.__init__(self, name="Packet" + str(packetID))
         self.packetID= packetID
@@ -142,6 +161,10 @@ class Packet(Process):
         self.propTime = None
         self.device = None
         
+    # to activate the process, call activate(p1, p1.run())
+    # I understand why link should be active-passivate-active...
+    # but I think packet could always stay active, I don't think I see
+    # why we need to make it passivate and wake up again.
     def run(self):
         while True:
             yield passivate, self
@@ -246,7 +269,7 @@ class Source(Device):
         self.flowRate = flowRate
         self.congestionAlgID = congestionAlgID
         self.roundTripTime = 0
-        self.windowSize = 100
+        self.windowSize = 100000000000
         self.currentPacketID = 0
         self.outstandingPackets = {}
         self.link = None
@@ -271,9 +294,11 @@ class Source(Device):
             if not self.link.active:
                 reactivate(self.link)
                 self.link.active = True
-            self.sendPacket(self.createPacket())
+            packet = self.createPacket()
+            self.sendPacket(packet)
+            yield hold, self, packet.size/float(self.link.linkRate)
             if not now() == 0:
-                self.sendRateMonitor.observe(self.numPacketsSent / float(now()))
+                self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
             
     def createPacket(self):
         message = "Packet " + str(self.currentPacketID) + "'s data goes here!"
@@ -314,11 +339,11 @@ linkFlowRates = []
 #For each device in the nodes, instantiate the appropriate device with its monitors
 for id in range(len(nodes)):
     if nodes[id][2]:
-        m = Monitor(name = 'Send Rate of Source ' + str(id))
+        m = Monitor(name = 'Send Rate of Source ' + str(id) + 'v1')
         devices.append(Source(id, nodes[id][5], nodes[id][6], nodes[id][7], nodes[id][8], m))
         activate(devices[id], devices[id].run(), at=nodes[id][9])
         if nodes[id][0]:
-            sendRates.append(Monitor(name = 'Send Rate of Source ' + str(id)))
+            sendRates.append(m)
     elif nodes[id][3]:
         thru = Monitor(name = 'Throughput to Destination ' + str(id))
         throughputs.append(thru)
@@ -352,45 +377,51 @@ for i in range(len(topology)):
 simulate(until=1000000000)
 
 ### Plot and save all the measurements. 
-#for m in throughputs:
-    #plt.plot(m.tseries(), m.yseries())
-    #plt.title(m.name)
-    #plt.xlabel("Time")
-    #plt.ylabel("Bits per Second")
-    #plt.savefig("throughput" + str(i) + ".png")
+for m in throughputs:
+    plt.plot(m.tseries(), m.yseries())
+    plt.title(m.name)
+    plt.xlabel("Time")
+    plt.ylabel("Bits per Second")
+    plt.savefig("throughput" + str(i) + ".png")
+    plt.clf()
     
-#for m in sendRates:
-    #plt.plot(m.tseries(), m.yseries())
-    #plt.title(m.name)
-    #plt.xlabel("Time")
-    #plt.ylabel("Bits per Second")
-    #plt.savefig("sendRate" + str(i) + ".png")
+for m in sendRates:
+    plt.plot(m.tseries(), m.yseries())
+    plt.title(m.name)
+    plt.xlabel("Time")
+    plt.ylabel("Bits per Second")
+    plt.savefig("sendRate" + str(i) + ".png")
+    plt.clf()
     
-#for m in packetDelays:
-    #plt.plot(m.tseries(), m.yseries())
-    #plt.title(m.name)
-    #plt.xlabel("Time")
-    #plt.ylabel("Time")
-    #plt.savefig("packetDelay" + str(i) + ".png")
+for m in packetDelays:
+    plt.plot(m.tseries(), m.yseries())
+    plt.title(m.name)
+    plt.xlabel("Time")
+    plt.ylabel("Time")
+    plt.savefig("packetDelay" + str(i) + ".png")
+    plt.clf()
     
-#for m in bufferOccs:
-    #plt.plot(m.tseries(), m.yseries())
-    #plt.title(m.name)
-    #plt.xlabel("Time")
-    #plt.ylabel("Packets")
-    #plt.savefig("bufferOccupancies" + str(i) + ".png")
+for m in bufferOccs:
+    plt.plot(m.tseries(), m.yseries())
+    plt.title(m.name)
+    plt.xlabel("Time")
+    plt.ylabel("Packets")
+    plt.savefig("bufferOccupancies" + str(i) + ".png")
+    plt.clf()
     
-#for m in droppedPackets:
-    #plt.plot(m.tseries(), m.yseries())
-    #plt.title(m.name)
-    #plt.xlabel("Time")
-    #plt.ylabel("Packets")
-    #plt.savefig("droppedPackets" + str(i) + ".png")
+for m in droppedPackets:
+    plt.plot(m.tseries(), m.yseries())
+    plt.title(m.name)
+    plt.xlabel("Time")
+    plt.ylabel("Packets")
+    plt.savefig("droppedPackets" + str(i) + ".png")
+    plt.clf()
     
-#for m in linkFlowRates:
-    #plt.plot(m.tseries(), m.yseries())
-    #plt.title(m.name)
-    #plt.xlabel("Time")
-    #plt.ylabel("Bits per Second")
-    #plt.savefig("linkSendRate" + str(i)  + ".png")
-#print("done")
+for m in linkFlowRates:
+    plt.plot(m.tseries(), m.yseries())
+    plt.title(m.name)
+    plt.xlabel("Time")
+    plt.ylabel("Bits per Second")
+    plt.savefig("linkSendRate" + str(i)  + ".png")
+    plt.clf()
+print("done")
