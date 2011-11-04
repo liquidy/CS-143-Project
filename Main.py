@@ -46,6 +46,7 @@ class Destination(Device):
         
     # process packets as they arrive
     def run(self):
+        self.active = True
         while True:
             # passivate until receivePacket is called
             self.link.buffMonitor.observe(len(self.link.queue))
@@ -116,6 +117,7 @@ class Link(Process):
     # Source can use this attribute to decide if it needs to reactivate the  
     # link
     def run(self):
+        self.active = True
         while True:
             if self.queue == []:
                 self.active = False
@@ -195,6 +197,7 @@ class Router(Device):
         self.routingTable = [None] * len(self.network)
     
     def run(self):
+        self.active = True
         self.mapLinks()
         self.dijkstra()
         while True:
