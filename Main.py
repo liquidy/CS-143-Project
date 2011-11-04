@@ -1,4 +1,4 @@
-from SimPy.Simulation import  * 
+from SimPy.Simulation import * 
 import numpy as py
 import matplotlib.pyplot as plt
 
