@@ -201,11 +201,11 @@ class Router(Device):
                 self.active = True
             pkt = self.buffer.pop(0)
             dest = pkt.desID
-            link = self.routingTable(desID)
+            link = self.routingTable(dest)
             self.sendPacket(pkt, link)
             # TODO: check for router messages
             
-    def sendPacket(pkt, link):
+    def sendPacket(self, pkt, link):
         if len(link.queue) < self.bufferCapacity:
             if not link.active:
                 reactivate(link)
