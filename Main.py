@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import math
 
 PACKET_SIZE = 8000
+PROBE_DROP_DELAY = 10
+PROBE_SAMPLE_SIZE = 10
+PROBE_RATE = 10
 
 class Device(Process):
 
@@ -142,7 +145,7 @@ class Link(Process):
             packet.propTime = self.propTime
             packet.device = self.end
             reactivate(packet)
-            print "t = %.2f: Job-%d departs" % (now(), packet.packetID)        
+            print "t = %.2f: Job-%s departs" % (now(), str(packet.packetID))        
 
 #packet:
 #- packet is a process
@@ -188,22 +191,43 @@ class Packet(Process):
                 self.device.active = True
             self.device.receivePacket(self)        
 
+class RoutingTimer(Process):
+
+    def __init__(self, router):
+        Process.__init__(self, name="RoutingTimer " + str(router.ID))
+        self.router = router
+        self.time = PROBE_RATE
+        
+    def run(self):
+        while True:
+            print "plue"
+            yield hold, self, self.time
+            self.router.timerHandler()
+            
 class Router(Device):
     
     # network - adjancency matrix of (monitored, link rate, propagation delay)
     def __init__(self, id, network):
         Device.__init__(self, id)
         self.network = network
+        self.networkSize = len(self.network)
         self.buffer = []
         self.active = False
-        # self.rerouting = False
+        self.rerouting = False
         self.links = []  # to be filled by global initializer
-        self.linkMap = [None] * len(self.network) # linkMap[i] is a link to node i
-        # self.delays = []
-        self.routingTable = [None] * len(self.network)
+        self.linkMap = [None] * self.networkSize # linkMap[i] is a link to node i
+        self.delays = [] # delays[i] is a list of measured packet delays to node i
+        for i in range(self.networkSize):
+            self.delays.append([])
+        self.delayData = [] # data sent to other routers during rerouting
+        self.haveData = [] # haveData[i] indicates whether the link state data for node i is known
+        self.haveAck = [] # haveAck[i] indicates whether a topAck has been recieved from node i
+        self.routingTable = [None] * self.networkSize
+        self.timer = RoutingTimer(self) 
     
     def run(self):
         self.active = True
+        activate(self.timer, self.timer.run())
         self.mapLinks()
         self.dijkstra()
         while True:
@@ -216,9 +240,10 @@ class Router(Device):
                 self.active = True
             pkt = self.buffer.pop(0)
             dest = pkt.desID
-            link = self.routingTable[dest]
-            self.sendPacket(pkt, link)
-            # TODO: check for router messages
+            if dest == self.ID:
+                self.processMessage(pkt)
+            else:
+                self.sendPacket(pkt, self.routingTable[dest])
             
     def sendPacket(self, pkt, link):
         if len(link.queue) < link.bufferCapacity:
@@ -242,12 +267,12 @@ class Router(Device):
     def dijkstra(self):
         # initialize a list of (predecessor, distance, deviceID) triples
         paths = []
-        for i in range(len(self.network)):
+        for i in range(self.networkSize):
             paths.append((None, None, i))
         paths[self.ID] = (self.ID, 0, self.ID)
         # initialize a list of IDs of undiscovered nodes
         left = []
-        for i in range(len(self.network)):
+        for i in range(self.networkSize):
             left.append(i)
         
         while len(left) > 0:
@@ -263,9 +288,9 @@ class Router(Device):
                         
             # discover closest node and update shortest distances to its neighbors
             left.remove(nextNode)
-            for i in range(len(self.network)):
+            for i in range(self.networkSize):
                 link = self.network[nextNode][i]
-                if len(link) > 1: # if a link exists between nextNode and node i
+                if len(link) > 1: # if a link exists from nextNode to node i
                     dist = minDist + link[2]
                     if dist < paths[i][1] or paths[i][1] == None: # if we found a shorter path to node i
                         paths[i] = (nextNode, dist, i)
@@ -277,7 +302,108 @@ class Router(Device):
                 node = paths[node[0]]
             # update routing table
             self.routingTable[i] = self.linkMap[node[2]]
+            
+        self.rerouting = False
+        
 
+    def processMessage(self, pkt):
+        source = pkt.sourceID
+        print pkt.myMessage
+        (type, data) = pkt.myMessage
+        if type == "probe" and not self.rerouting:
+            # no data; send probeAck to source with packet delay
+            msg = ("probeAck", float(now()) - pkt.timeSent)
+            ack = Packet("Probe %d %d" % (self.ID, source), now(), self.ID, source, True, True, msg)
+            activate(ack, ack.run())
+            self.sendPacket(ack, self.routingTable[source])
+        elif type == "probeAck" and not self.rerouting:
+            # data is packet delay over link to source
+            self.delays[source].append(data)
+            if len(self.delays[source]) >= PROBE_SAMPLE_SIZE:
+                self.initiateReroute()
+        elif type == "reroute":
+            # data is list of (start, end, delay) tuples;
+            # if not rerouting, begin rerouting and broadcast delays;
+            # send topAck to source;
+            # process the recieved data and check if done rerouting
+            if self.rerouting == False:
+                self.initiateReroute()
+            pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, source, True, True, ("topAck", delayData))
+            activate(pkt, pkt.run())
+            self.sendPacket(pkt, self.routingTable[source])
+            if not self.haveData[source]:
+                haveData[source] = True
+                self.updateNetwork(data)
+                if self.haveData == [True] * self.networkSize and self.haveAck == [True] * self.networkSize:
+                    self.dijkstra()
+        elif type == "topology":
+            # data is list of (start, end, delay) tuples;
+            # send topAck to source and and check if done rerouting
+            pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, source, True, True, ("topAck", delayData))
+            activate(pkt, pkt.run())
+            self.sendPacket(pkt, self.routingTable[source])
+            if self.rerouting and not self.haveData[source]:
+                haveData[source] = True
+                self.updateNetwork(data)
+                if self.haveData == [True] * self.networkSize and self.haveAck == [True] * self.networkSize:
+                    self.dijkstra()
+        elif type == "topAck" and self.rerouting:
+            # data is list of (start, end, delay) tuples;
+            # check if data is new and process if so;
+            # source has recieved delay data, check if done rerouting
+            self.haveAck[source] = True
+            if not self.haveData[source]:
+                haveData[source] = True
+                self.updateNetwork(data)
+                pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, source, True, True, ("topAck", delayData))
+                activate(pkt, pkt.run())
+                self.sendPacket(pkt, self.routingTable[source])
+            if self.haveData == [True] * self.networkSize and self.haveAck == [True] * self.networkSize:
+                self.dijkstra()
+    
+    def initiateReroute(self):
+        self.rerouting = True
+        self.haveData = [False] * self.networkSize
+        self.haveData[self.ID] = True
+        self.haveAck = [False] * self.networkSize
+        self.haveAck[self.ID] = True
+        self.delayData = []
+        for i in range(self.networkSize):
+            delays = self.delays[i]
+            if delays != []:
+                self.delayData.append((self.ID, i, sum(delays)/float(len(delays))))
+            delays = []
+        self.updateNetwork(self.delayData)
+        for i in range(self.networkSize):
+            if i is not self.ID:
+                pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, i, True, False, ("reroute", self.delayData))
+                activate(pkt, pkt.run())
+                self.sendPacket(pkt, self.routingTable[i])
+                
+    def updateNetwork(self, data):
+        for datum in data:
+            (start, end, delay) = datum
+            self.network[start][end][2] = delay
+                
+    def timerHandler(self):
+        if not self.rerouting:
+            # send probes
+            for link in self.links:
+                dst = link.end.ID
+                if len(link.queue) >= link.bufferCapacity:
+                    self.delays[dst].append(PROBE_DROP_DELAY)
+                pkt = Packet("Probe %d %d" % (self.ID, dst), now(), self.ID, dst, True, False, ("probe", None))
+                activate(pkt, pkt.run())
+                self.sendPacket(pkt, link)
+        else:
+            # resent unacknowledged data
+            for i in range(self.networkSize):
+                if not self.haveAck[i]:
+                    pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, i, True, False, ("topology", self.delayData))
+                    activate(pkt, pkt.run())
+                    self.sendPacket(pkt, self.routingTable[i])
+    
+    
 # Source
 class Source(Device):
 
