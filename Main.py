@@ -407,7 +407,7 @@ class Router(Device):
 # Source
 class Source(Device):
 
-    def __init__(self, ID, destinationID, bitsToSend, congestionAlgID, monitor):
+    def __init__(self, ID, destinationID, bitsToSend, congestionAlgID, sendRateMonitor, windowSizeMonitor):
         Device.__init__(self, ID)
         self.destinationID = destinationID
         self.bitsToSend = bitsToSend
@@ -419,7 +419,8 @@ class Source(Device):
         self.toRetransmit = []
         self.link = None
         self.active = False
-        self.sendRateMonitor = monitor
+        self.sendRateMonitor = sendRateMonitor
+        self.windowSizeMonitor = windowSizeMonitor
         self.numMissingAcks = 5
         self.missingAck = 0
         self.numPacketsSent = 0
@@ -446,8 +447,6 @@ class Source(Device):
                     if not now() == 0:
                         self.link.buffMonitor.observe(len(self.link.queue))
                         self.link.dropMonitor.observe(self.link.droppedPackets)
-                        if now() > 2000:
-                            star = 1
                         self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
             # If everything has been sent, go to sleep
             elif (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
@@ -460,13 +459,9 @@ class Source(Device):
                 # wait
                 yield hold, self, packet.size/float(self.link.linkRate)
                 # collect stats
-                if now() > 7:
-                    srat = 1
                 if not now() == 0:
                     self.link.buffMonitor.observe(len(self.link.queue))
                     self.link.dropMonitor.observe(self.link.droppedPackets)
-                    if now() > 2000:
-                        star = 1
                     self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
             # nothing to retransmit and cannot send new packets
             else:
@@ -529,6 +524,7 @@ class Source(Device):
     def receivePacket(self, packet):
         if packet.isAck and packet.packetID in self.outstandingPackets:
             self.windowSize += 1/float(math.floor(self.windowSize))
+            self.windowSizeMonitor.observe(self.windowSize)
             del self.outstandingPackets[packet.packetID]
             print 'Ack received. ID: ' + str(packet.packetID)
        
@@ -556,6 +552,7 @@ class Timer(Process):
             self.source.missingAck += 1
             if (self.source.missingAck == self.source.numMissingAcks):
                 self.source.windowSize = self.source.windowSize / 2
+                self.source.windowSizeMonitor.observe(self.source.windowSize)
             # add packet to source's queue
             self.source.toRetransmit.append(self.createPacket(self.packet))
             if not self.source.active:
@@ -591,6 +588,7 @@ devices = []
 links = []
 throughputs = []
 sendRates = []
+windowSizes = []
 packetDelays = []
 bufferOccs = []
 droppedPackets = []
@@ -598,11 +596,13 @@ linkFlowRates = []
 #For each device in the nodes, instantiate the appropriate device with its monitors
 for id in range(len(nodes)):
     if nodes[id][1]:
-        m = Monitor(name = 'Send Rate of Source ' + str(id))
-        devices.append(Source(id, nodes[id][4], nodes[id][5], nodes[id][6], m))
+        sendRateMonitor = Monitor(name = 'Send Rate of Source ' + str(id))
+        windowSizeMonitor = Monitor(name = 'Window Size of Source '+str(id))
+        devices.append(Source(id, nodes[id][4], nodes[id][5], nodes[id][6], sendRateMonitor,windowSizeMonitor))
         activate(devices[id], devices[id].run(), at=nodes[id][7])
         if nodes[id][0]:
-            sendRates.append(m)
+            sendRates.append(sendRateMonitor)
+            windowSizes.append(windowSizeMonitor)
     elif nodes[id][2]:
         thru = Monitor(name = 'Throughput to Destination ' + str(id))
         throughputs.append(thru)
@@ -691,6 +691,16 @@ for m in linkFlowRates:
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
     plt.savefig("top2linkSendRate" + str(n)  + ".png")
+    plt.clf()
+    n += 1
+    
+n = 0
+for m in windowSizes:
+    plt.plot(m.tseries(), m.yseries(),'o')
+    plt.title(m.name)
+    plt.xlabel("Time")
+    plt.ylabel("Packets")
+    plt.savefig("top2windowSizes" + str(n)  + ".png")
     plt.clf()
     n += 1
 
