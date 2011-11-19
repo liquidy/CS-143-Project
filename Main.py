@@ -64,19 +64,20 @@ class Destination(Device):
             
             assert(self.packet is not None)
             
-            receivedTime = now()
-            self.receivedPackets.append((receivedTime, self.packet))
-            self.numPacketsReceived += 1
+            if not self.packet.isRouterMesg:
+                receivedTime = now()
+                self.receivedPackets.append((receivedTime, self.packet))
+                self.numPacketsReceived += 1
             
-            currDelay = receivedTime - self.packet.timeSent
-            self.totalPacketDelay += currDelay
-            if not now() == 0:
-                self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
-                self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
+                currDelay = receivedTime - self.packet.timeSent
+                self.totalPacketDelay += currDelay
+                if not now() == 0:
+                    self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
+                    self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
                 
-            self.acknowledge(self.packet)
+                    self.acknowledge(self.packet)
             
-            print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
+                    print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
             
     # called by link when it is time for packet to get to dest
     def receivePacket(self, packet):
@@ -200,7 +201,6 @@ class RoutingTimer(Process):
         
     def run(self):
         while True:
-            print "plue"
             yield hold, self, self.time
             self.router.timerHandler()
             
@@ -308,7 +308,6 @@ class Router(Device):
 
     def processMessage(self, pkt):
         source = pkt.sourceID
-        print pkt.myMessage
         (type, data) = pkt.myMessage
         if type == "probe" and not self.rerouting:
             # no data; send probeAck to source with packet delay
@@ -376,9 +375,14 @@ class Router(Device):
         self.updateNetwork(self.delayData)
         for i in range(self.networkSize):
             if i is not self.ID:
-                pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, i, True, False, ("reroute", self.delayData))
-                activate(pkt, pkt.run())
-                self.sendPacket(pkt, self.routingTable[i])
+                link = self.routingTable[i]
+                if type(link.end) is Router:
+                    pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, i, True, False, ("reroute", self.delayData))
+                    activate(pkt, pkt.run())
+                    self.sendPacket(pkt, link)
+                else:
+                    self.haveData[i] = True
+                    self.haveAck[i] = True
                 
     def updateNetwork(self, data):
         for datum in data:
@@ -522,7 +526,7 @@ class Source(Device):
         
         
     def receivePacket(self, packet):
-        if packet.isAck and packet.packetID in self.outstandingPackets:
+        if packet.isAck and packet.packetID in self.outstandingPackets and not packet.isRouterMesg:
             self.windowSize += 1/float(math.floor(self.windowSize))
             self.windowSizeMonitor.observe(self.windowSize)
             del self.outstandingPackets[packet.packetID]
