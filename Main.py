@@ -451,7 +451,7 @@ class Source(Device):
                     if not now() == 0:
                         self.link.buffMonitor.observe(len(self.link.queue))
                         self.link.dropMonitor.observe(self.link.droppedPackets)
-                        self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
+                        self.sendRateMonitor.observe(PACKET_SIZE * self.numPacketsSent / float(now()))
             # If everything has been sent, go to sleep
             elif (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
                 yield passivate, self            
@@ -527,7 +527,7 @@ class Source(Device):
         
     def receivePacket(self, packet):
         if packet.isAck and packet.packetID in self.outstandingPackets and not packet.isRouterMesg:
-            self.windowSize += 1/float(math.floor(self.windowSize))
+            self.windowSize += 1 / float(math.floor(self.windowSize))
             self.windowSizeMonitor.observe(self.windowSize)
             del self.outstandingPackets[packet.packetID]
             print 'Ack received. ID: ' + str(packet.packetID)
