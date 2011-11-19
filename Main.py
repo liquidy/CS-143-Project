@@ -202,6 +202,8 @@ class RoutingTimer(Process):
     def run(self):
         while True:
             yield hold, self, self.time
+            if flowsDone == numFlows:
+                yield passivate, self
             self.router.timerHandler()
             
 class Router(Device):
@@ -531,6 +533,9 @@ class Source(Device):
             self.windowSizeMonitor.observe(self.windowSize)
             del self.outstandingPackets[packet.packetID]
             print 'Ack received. ID: ' + str(packet.packetID)
+            if len(self.outstandingPackets) == 0 and (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
+                global flowsDone
+                flowsDone += 1
        
        
 # Timer
@@ -588,6 +593,8 @@ class Timer(Process):
 initialize()
 topology = [[[-1],[-1],[1, 10000, 15, 64]], [[-1],[-1],[1, 10000, 15, 64]], [[1, 10000, 15, 64],[1, 10000, 15, 64],[-1]]]
 nodes = [[1, 1, 0, 0, 1, 10000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0]]
+numFlows = 0
+flowsDone = 0
 devices = []
 links = []
 throughputs = []
@@ -600,6 +607,7 @@ linkFlowRates = []
 #For each device in the nodes, instantiate the appropriate device with its monitors
 for id in range(len(nodes)):
     if nodes[id][1]:
+        numFlows += 1
         sendRateMonitor = Monitor(name = 'Send Rate of Source ' + str(id))
         windowSizeMonitor = Monitor(name = 'Window Size of Source '+str(id))
         devices.append(Source(id, nodes[id][4], nodes[id][5], nodes[id][6], sendRateMonitor,windowSizeMonitor))
