@@ -4,10 +4,12 @@ import matplotlib.pyplot as plt
 import math
 
 PACKET_SIZE = 8000
-PROBE_DROP_DELAY = 10
-PROBE_SAMPLE_SIZE = 10
-PROBE_RATE = 10
-DYNAMIC_ROUTING = False
+INIT_WINDOW_SIZE = 1000
+ACK_TIMEOUT = 100
+DYNAMIC_ROUTING = True
+PROBE_DROP_DELAY = 30
+PROBE_SAMPLE_SIZE = 30
+PROBE_RATE = 15
 
 class Device(Process):
 
@@ -41,7 +43,7 @@ class Destination(Device):
         self.totalPacketDelay = 0   # calculate the sum of the total packet delays
         self.link = None
         self.active = False
-        self.receivedPackets = []  # stores all the rec'd packets
+        self.receivedPackets = {}  # stores all the rec'd packets
         self.currentAckPacketID = 0
         self.throughput = throughput
         self.packetDelay = packetDelay
@@ -67,8 +69,9 @@ class Destination(Device):
             
             if not self.packet.isRouterMesg:
                 receivedTime = now()
-                self.receivedPackets.append((receivedTime, self.packet))
-                self.numPacketsReceived += 1
+                if not self.packet in self.receivedPackets:
+                    self.receivedPackets[self.packet] = receivedTime
+                    self.numPacketsReceived += 1
             
                 currDelay = receivedTime - self.packet.timeSent
                 self.totalPacketDelay += currDelay
@@ -96,10 +99,10 @@ class Destination(Device):
         
     def createAckPacket(self):
         #(packetID, timeSent, sourceID, desID, isRouterMesg, isAck, myMessage, monitor)
-        message = "Acknowledgement packet " + str(self.currentAckPacketID) + "'s data goes here!"
+        message = "Acknowledgement packet " + str(self.packet.packetID) + "'s data goes here!"
 
         # need to instantiate monitor object to pass to ack packet
-        newPacket = Packet(self.currentAckPacketID, now(), self.ID, 
+        newPacket = Packet(self.packet.packetID, now(), self.ID, 
                            self.packet.sourceID, False, True, message)
 
         self.currentAckPacketID += 1
@@ -186,9 +189,7 @@ class Packet(Process):
     # why we need to make it passivate and wake up again.
     def run(self):
         while True:
-            self.active = False
             yield passivate, self
-            self.active = True
             yield hold, self, self.propTime
             if not self.device.active:
                 reactivate(self.device)
@@ -206,9 +207,7 @@ class RoutingTimer(Process):
         while True:
             yield hold, self, self.time
             if flowsDone == numFlows:
-                self.active = False
                 yield passivate, self
-                self.active = True
             self.router.timerHandler()
             
 class Router(Device):
@@ -234,7 +233,8 @@ class Router(Device):
     
     def run(self):
         self.active = True
-        activate(self.timer, self.timer.run())
+        if DYNAMIC_ROUTING:
+            activate(self.timer, self.timer.run())
         self.mapLinks()
         self.dijkstra()
         while True:
@@ -334,23 +334,24 @@ class Router(Device):
             # process the recieved data and check if done rerouting
             if self.rerouting == False:
                 self.initiateReroute()
-            pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, source, True, True, ("topAck", delayData))
+            pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, source, True, True, ("topAck", self.delayData))
             activate(pkt, pkt.run())
             self.sendPacket(pkt, self.routingTable[source])
             if not self.haveData[source]:
-                haveData[source] = True
+                self.haveData[source] = True
                 self.updateNetwork(data)
-                if self.haveData == [True] * self.networkSize and self.haveAck == [True] * self.networkSize:
-                    self.dijkstra()
+            if self.haveData == [True] * self.networkSize and self.haveAck == [True] * self.networkSize:
+                self.dijkstra()
         elif type == "topology":
             # data is list of (start, end, delay) tuples;
             # send topAck to source and and check if done rerouting
-            pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, source, True, True, ("topAck", delayData))
+            pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, source, True, True, ("topAck", self.delayData))
             activate(pkt, pkt.run())
             self.sendPacket(pkt, self.routingTable[source])
-            if self.rerouting and not self.haveData[source]:
-                haveData[source] = True
-                self.updateNetwork(data)
+            if self.rerouting:
+                if not self.haveData[source]:
+                    self.haveData[source] = True
+                    self.updateNetwork(data)
                 if self.haveData == [True] * self.networkSize and self.haveAck == [True] * self.networkSize:
                     self.dijkstra()
         elif type == "topAck" and self.rerouting:
@@ -359,11 +360,8 @@ class Router(Device):
             # source has recieved delay data, check if done rerouting
             self.haveAck[source] = True
             if not self.haveData[source]:
-                haveData[source] = True
+                self.haveData[source] = True
                 self.updateNetwork(data)
-                pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, source, True, True, ("topAck", delayData))
-                activate(pkt, pkt.run())
-                self.sendPacket(pkt, self.routingTable[source])
             if self.haveData == [True] * self.networkSize and self.haveAck == [True] * self.networkSize:
                 self.dijkstra()
     
@@ -378,15 +376,14 @@ class Router(Device):
             delays = self.delays[i]
             if delays != []:
                 self.delayData.append((self.ID, i, sum(delays)/float(len(delays))))
-            delays = []
+            self.delays[i] = []
         self.updateNetwork(self.delayData)
         for i in range(self.networkSize):
             if i is not self.ID:
-                link = self.routingTable[i]
-                if type(link.end) is Router:
+                if not (nodes[i][1] or nodes[i][2]):
                     pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, i, True, False, ("reroute", self.delayData))
                     activate(pkt, pkt.run())
-                    self.sendPacket(pkt, link)
+                    self.sendPacket(pkt, self.routingTable[i])
                 else:
                     self.haveData[i] = True
                     self.haveAck[i] = True
@@ -424,7 +421,7 @@ class Source(Device):
         self.bitsToSend = bitsToSend
         self.congestionAlgID = congestionAlgID
         self.roundTripTime = 0
-        self.windowSize = 1000
+        self.windowSize = INIT_WINDOW_SIZE
         self.currentPacketID = 0
         self.outstandingPackets = {}
         self.toRetransmit = []
@@ -435,7 +432,7 @@ class Source(Device):
         self.numMissingAcks = 5
         self.missingAck = 0
         self.numPacketsSent = 0
-        self.timeout = 100 # NEED TO ESTIMATE LATER
+        self.timeout = ACK_TIMEOUT # NEED TO ESTIMATE LATER
 
     def addLink(self, link):
         self.link = link
@@ -462,7 +459,8 @@ class Source(Device):
             # If everything has been sent, go to sleep
             elif (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
                 self.active = False
-                yield passivate, self
+                yield passivate, self            
+                self.active = True
             # otherwise, send new packets!
             elif len(self.outstandingPackets) < self.windowSize:
                 # send a new packet
@@ -498,7 +496,7 @@ class Source(Device):
             while len(self.toRetransmit) > 0:
                 pack = self.toRetransmit.pop()
                 #print 'size: ' + str(len(self.toRetransmit))
-                if (pack in self.outstandingPackets):
+                if (pack.packetID in self.outstandingPackets):
                     packet = pack
                     break
             if (packet != None):
@@ -522,15 +520,13 @@ class Source(Device):
             activate(t, t.run())
     
     def sendPacketAgain(self, packet):
-        if (PACKET_SIZE * self.numPacketsSent < self.bitsToSend):
-            self.outstandingPackets[packet.packetID] = True
-            if (self.link.active is not True):
-                reactivate(self.link)
-                self.link.active = True 
-            self.link.queue.append(packet)
-            # create the timer for this packet
-            t = Timer(packet, self.timeout, self)
-            activate(t, t.run())
+        if (self.link.active is not True):
+            reactivate(self.link)
+            self.link.active = True 
+        self.link.queue.append(packet)
+        # create the timer for this packet
+        #t = Timer(packet, self.timeout, self)
+        #activate(t, t.run())
         
         
     def receivePacket(self, packet):
@@ -540,7 +536,7 @@ class Source(Device):
             del self.outstandingPackets[packet.packetID]
             print 'Ack received. ID: ' + str(packet.packetID)
             if len(self.outstandingPackets) == 0 and (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
-                global flowsDone
+                global flowsDone, numFlows
                 flowsDone += 1
        
        
@@ -559,25 +555,24 @@ class Timer(Process):
         self.source = source 
     
     def run(self):
-        #print 'timer starting, packet id: ' + str(self.packet.packetID)
-        yield hold, self, self.time
-        #print 'timer went off'
-        # while we havent received an ack for the packet
-        if self.packet.packetID in self.source.outstandingPackets:  
-            self.source.missingAck += 1
-            if (self.source.missingAck == self.source.numMissingAcks):
-                self.source.windowSize = self.source.windowSize / 2
-                self.source.windowSizeMonitor.observe(self.source.windowSize)
-            # add packet to source's queue
-            self.source.toRetransmit.append(self.createPacket(self.packet))
-            if not self.source.active:
-                self.source.active = True
-                reactivate(self.source)
-            print 'Retransmitting packet ' + str(self.packet.packetID) + ' at time: ' + str(now())
+        while self.packet.packetID in self.source.outstandingPackets:
+            #print 'timer starting, packet id: ' + str(self.packet.packetID)
+            yield hold, self, self.time
+            #print 'timer went off'
+            # while we havent received an ack for the packet
+            if self.packet.packetID in self.source.outstandingPackets:  
+                self.source.missingAck += 1
+                if (self.source.missingAck == self.source.numMissingAcks):
+                    self.source.windowSize = self.source.windowSize / 2
+                    self.source.windowSizeMonitor.observe(self.source.windowSize)
+                    # add packet to source's queue
+                self.source.toRetransmit.append(self.createPacket(self.packet))
+                if not self.source.active:
+                    self.source.active = True
+                    reactivate(self.source)
+                print 'Retransmitting packet ' + str(self.packet.packetID) + ' at time: ' + str(now())
         #print 'here: ' + str(self.packet.packetID)
-        self.active = False
         yield passivate, self
-        self.active = True
             
     # copy of packet with this id
     def createPacket(self, packet):
@@ -599,8 +594,8 @@ class Timer(Process):
 #   [monitored, isSource, isDest, sourceID, destID, numbits, congID, starttime, bufferCapacity]
 
 initialize()
-topology = [[[-1],[-1],[1, 10000, 15, 64]], [[-1],[-1],[1, 10000, 15, 64]], [[1, 10000, 15, 64],[1, 10000, 15, 64],[-1]]]
-nodes = [[1, 1, 0, 0, 1, 10000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0]]
+topology = [[[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[1]], [[-1],[-1],[-1],[-1],[-1],[1, 10000, 15, 64]], [[1, 10000, 15, 64],[-1],[-1],[1, 10000, 15, 64],[1, 10000, 15, 64],[-1]], [[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[1, 10000, 15, 64]], [[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[1, 10000, 15, 64]], [[-1],[1, 10000, 15, 64],[-1],[1, 10000, 15, 64],[1, 10000, 15, 64],[-1]]]
+nodes = [[1, 1, 0, 0, 1, 10000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
 numFlows = 0
 flowsDone = 0
 devices = []
@@ -651,7 +646,7 @@ for i in range(len(topology)):
             links.append(link)
             devices[i].addLink(link)
                 
-simulate(until = 3000)
+simulate(until = 5000)
 
 ### Plot and save all the measurements. 
 n = 0
