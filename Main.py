@@ -5,7 +5,7 @@ import math
 
 PACKET_SIZE = 8000
 INIT_WINDOW_SIZE = 1000
-ACK_TIMEOUT = 100
+ACK_TIMEOUT = 100 # NEED TO ESTIMATE LATER
 DYNAMIC_ROUTING = True
 PROBE_DROP_DELAY = 30
 PROBE_SAMPLE_SIZE = 30
@@ -44,7 +44,6 @@ class Destination(Device):
         self.link = None
         self.active = False
         self.receivedPackets = {}  # stores all the rec'd packets
-        self.currentAckPacketID = 0
         self.throughput = throughput
         self.packetDelay = packetDelay
         self.packet = None
@@ -69,8 +68,8 @@ class Destination(Device):
             
             if not self.packet.isRouterMesg:
                 receivedTime = now()
-                if not self.packet in self.receivedPackets:
-                    self.receivedPackets[self.packet] = receivedTime
+                if not self.packet.packetID in self.receivedPackets:
+                    self.receivedPackets[self.packet.packetID] = receivedTime
                     self.numPacketsReceived += 1
             
                 currDelay = receivedTime - self.packet.timeSent
@@ -105,7 +104,6 @@ class Destination(Device):
         newPacket = Packet(self.packet.packetID, now(), self.ID, 
                            self.packet.sourceID, False, True, message)
 
-        self.currentAckPacketID += 1
         activate(newPacket, newPacket.run())
         return newPacket 
             
@@ -432,16 +430,10 @@ class Source(Device):
         self.numMissingAcks = 5
         self.missingAck = 0
         self.numPacketsSent = 0
-        self.timeout = ACK_TIMEOUT # NEED TO ESTIMATE LATER
+        self.timeout = ACK_TIMEOUT
 
     def addLink(self, link):
         self.link = link
-
-    # TODO:  Create new timer process.  Source creates timer for each packet
-    # and passes it the packet's ID.  When the timer expires, if the packet has
-    # not been acknowledged, it creates a new packet with the same ID and sends
-    # it from the Source before resetting its time.  
-    #(secretly a congestion control process)
     
     def run(self):
         self.active = True
@@ -495,7 +487,6 @@ class Source(Device):
             # keep popping packets off toRetr until we find one that is outstanding
             while len(self.toRetransmit) > 0:
                 pack = self.toRetransmit.pop()
-                #print 'size: ' + str(len(self.toRetransmit))
                 if (pack.packetID in self.outstandingPackets):
                     packet = pack
                     break
@@ -524,10 +515,6 @@ class Source(Device):
             reactivate(self.link)
             self.link.active = True 
         self.link.queue.append(packet)
-        # create the timer for this packet
-        #t = Timer(packet, self.timeout, self)
-        #activate(t, t.run())
-        
         
     def receivePacket(self, packet):
         if packet.isAck and packet.packetID in self.outstandingPackets and not packet.isRouterMesg:
@@ -556,9 +543,7 @@ class Timer(Process):
     
     def run(self):
         while self.packet.packetID in self.source.outstandingPackets:
-            #print 'timer starting, packet id: ' + str(self.packet.packetID)
             yield hold, self, self.time
-            #print 'timer went off'
             # while we havent received an ack for the packet
             if self.packet.packetID in self.source.outstandingPackets:  
                 self.source.missingAck += 1
@@ -571,7 +556,6 @@ class Timer(Process):
                     self.source.active = True
                     reactivate(self.source)
                 print 'Retransmitting packet ' + str(self.packet.packetID) + ' at time: ' + str(now())
-        #print 'here: ' + str(self.packet.packetID)
         yield passivate, self
             
     # copy of packet with this id
