@@ -7,6 +7,7 @@ PACKET_SIZE = 8000
 PROBE_DROP_DELAY = 10
 PROBE_SAMPLE_SIZE = 10
 PROBE_RATE = 10
+DYNAMIC_ROUTING = False
 
 class Device(Process):
 
@@ -185,7 +186,9 @@ class Packet(Process):
     # why we need to make it passivate and wake up again.
     def run(self):
         while True:
+            self.active = False
             yield passivate, self
+            self.active = True
             yield hold, self, self.propTime
             if not self.device.active:
                 reactivate(self.device)
@@ -203,7 +206,9 @@ class RoutingTimer(Process):
         while True:
             yield hold, self, self.time
             if flowsDone == numFlows:
+                self.active = False
                 yield passivate, self
+                self.active = True
             self.router.timerHandler()
             
 class Router(Device):
@@ -453,10 +458,11 @@ class Source(Device):
                     if not now() == 0:
                         self.link.buffMonitor.observe(len(self.link.queue))
                         self.link.dropMonitor.observe(self.link.droppedPackets)
-                        self.sendRateMonitor.observe(PACKET_SIZE * self.numPacketsSent / float(now()))
+                        self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
             # If everything has been sent, go to sleep
             elif (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
-                yield passivate, self            
+                self.active = False
+                yield passivate, self
             # otherwise, send new packets!
             elif len(self.outstandingPackets) < self.windowSize:
                 # send a new packet
@@ -529,7 +535,7 @@ class Source(Device):
         
     def receivePacket(self, packet):
         if packet.isAck and packet.packetID in self.outstandingPackets and not packet.isRouterMesg:
-            self.windowSize += 1 / float(math.floor(self.windowSize))
+            self.windowSize += 1/float(math.floor(self.windowSize))
             self.windowSizeMonitor.observe(self.windowSize)
             del self.outstandingPackets[packet.packetID]
             print 'Ack received. ID: ' + str(packet.packetID)
@@ -569,7 +575,9 @@ class Timer(Process):
                 reactivate(self.source)
             print 'Retransmitting packet ' + str(self.packet.packetID) + ' at time: ' + str(now())
         #print 'here: ' + str(self.packet.packetID)
+        self.active = False
         yield passivate, self
+        self.active = True
             
     # copy of packet with this id
     def createPacket(self, packet):
