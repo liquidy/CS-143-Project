@@ -64,12 +64,12 @@ class Destination(Device):
         self.link = None                 # keeps track of the link it is connected to
         self.active = False              # is this process active?
         self.receivedPackets = []        # list of packetID's   
-        self.currentAckPacketID = 0      # keeps track of the next id of the ack packet
+        self.currentAckPacketID = 0      # keeps track of the next id of the ack packet (simply increments every time we ack)
         self.throughput = throughput     # monitor - collects stats
         self.packetDelay = packetDelay   # monitor - collects stats
         self.packet = None               # the current packet we are dealing with
         self.missingPackets = []         # which packets have we not received yet?
-        self.currentAckPacketID = -1
+        self.currentPacketIDToAck = -1     # keeps track of the next packet ID to acknowledge
 
     # Attach a Link to this Destination.
     def addLink(self, link):
@@ -121,7 +121,7 @@ class Destination(Device):
                     self.totalPacketDelay += (receivedTime - self.packet.timeSent)
                     
                     # the packet to ack is just this current packet
-                    self.currentAckPacketID = self.packet.packetID
+                    self.currentPacketIDToAck = self.packet.packetID
 
                 # if we get a packet that was missing, add to rec'd list and remove 
                 # from missing list; also ack this packet
@@ -137,7 +137,7 @@ class Destination(Device):
                     self.missingPackets.remove(self.packet.packetID)
                     
                     # send ack for packet in missing list with smallest id
-                    self.currentAckPacketID = min(self.missingPackets) - 1
+                    self.currentPacketIDToAck = min(self.missingPackets) - 1
                     
                 # if there are missing packets between the current packet
                 # and the last received packet
@@ -153,7 +153,7 @@ class Destination(Device):
                         self.missingPackets.append(i)
                         
                     # send ack for packet in missing list with smallest id
-                    self.currentAckPacketID = min(self.missingPackets) - 1
+                    self.currentPacketIDToAck = min(self.missingPackets) - 1
                         
                     # add the current packet to the rec'd list since we did receive it
                     self.receivedPackets.append(self.packet.packetID)
@@ -186,11 +186,11 @@ class Destination(Device):
     def createAckPacket(self):
         message = "Acknowledgement packet " + str(self.currentAckPacketID) + "'s data goes here!"
         # create the packet object with the needed ack packet id, source id, etc.
-        newPacket = Packet(self.currentAckPacketID, now(), self.ID, 
+        newPacket = Packet(self.currentPacketIDToAck, now(), self.ID, 
                            self.sourceID, False, True, message)
         self.currentAckPacketID += 1
         activate(newPacket, newPacket.run())
-        return newPacket
+        return newPacket    
 
 ####################################################################################    
 # LINK
