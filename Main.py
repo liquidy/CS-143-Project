@@ -8,7 +8,7 @@ PACKET_SIZE = 8000
 #INIT_WINDOW_SIZE = 1000
 INIT_WINDOW_SIZE = 1
 THRESHOLD = 100
-ACK_TIMEOUT = 2000 # NEED TO ESTIMATE LATER
+ACK_TIMEOUT = 200 # NEED TO ESTIMATE LATER
 DYNAMIC_ROUTING = True
 PROBE_DROP_DELAY = 30
 PROBE_SAMPLE_SIZE = 30
@@ -114,7 +114,7 @@ class Destination(Device):
                 # if we are receiving the next consecutive packet (meaning we did not 
                 # lose anything yet), add packet to received packets list and ack this current packet
                 # (good case - consecutive packets)
-                if self.packet.packetID - 1 in self.receivedPackets:
+                if self.numPacketsReceived == 0 or self.packet.packetID - 1 in self.receivedPackets:
                     self.receivedPackets.append(self.packet.packetID)
                     self.numPacketsReceived += 1
                     # add to the aggregate delay across all packets
@@ -149,11 +149,12 @@ class Destination(Device):
                     # add missing packets starting at the id of the last 
                     # received packet (last element in received packets list assuming a sorted list) 
                     # and the current packet
-                    for i in range(self.receivedPackets[-1] + 1, self.packet.packetID):
-                        self.missingPackets.append(i)
+                    if self.numPacketsReceived > 0:
+                        for i in range(self.receivedPackets[-1] + 1, self.packet.packetID):
+                            self.missingPackets.append(i)
                         
-                    # send ack for packet in missing list with smallest id
-                    self.currentPacketIDToAck = min(self.missingPackets) - 1
+                        # send ack for packet in missing list with smallest id
+                        self.currentPacketIDToAck = min(self.missingPackets) - 1
                         
                     # add the current packet to the rec'd list since we did receive it
                     self.receivedPackets.append(self.packet.packetID)
@@ -541,16 +542,6 @@ class Source(Device):
         self.active = True
         packetIdToRetransmit = -1
         while True:
-            # resend anything, if need to
-            #if len(self.toRetransmit) > 0:
-            #    (didtransmit, p) = self.retransmitPacket()
-            #    if (didtransmit): # if transmitted, wait
-            #        yield hold, self, p.size/float(self.link.linkRate)
-            #        # collect stats
-            #        if not now() == 0:
-            #            self.link.buffMonitor.observe(len(self.link.queue))
-            #            self.link.dropMonitor.observe(self.link.droppedPackets)
-            #            self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
             
             if self.enabledCCA:
                 if not self.fastRecovery:
@@ -559,6 +550,18 @@ class Source(Device):
                     if packetIdToRetransmit != -1:
                         self.fastRecovery = True
                         self.windowSize = self.windowSize / 2
+                        
+            # resend anything, if need to
+            elif len(self.toRetransmit) > 0:
+                (didtransmit, p) = self.retransmitPacket()
+                if (didtransmit): # if transmitted, wait
+                    yield hold, self, p.size/float(self.link.linkRate)
+                    # collect stats
+                    if not now() == 0:
+                        self.link.buffMonitor.observe(len(self.link.queue))
+                        self.link.dropMonitor.observe(self.link.droppedPackets)
+                        self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
+                
             if self.fastRecovery:
                 # For every 3 dup acks received, get the packetID for retransmit
                 packetIdToRetransmit = self.getPacketIdToRetransmit()
@@ -712,8 +715,9 @@ class Timer(Process):
             
             # while we havent received an ack for the packet
             if self.packet.packetID in self.source.outstandingPackets:
+                global THRESHOLD
                 # When time out, update variables to slow start
-                self.enabledCCA = False
+                self.source.enabledCCA = False
                 THRESHOLD = THRESHOLD / 2
                 self.windowSize = 1
                 
