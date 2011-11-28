@@ -14,8 +14,16 @@ PROBE_DROP_DELAY = 30
 PROBE_SAMPLE_SIZE = 30
 PROBE_RATE = 15
 
+####################################################################################
+# DEVICE
+####################################################################################
+
+#
+# Describes a superclass from which Router, Source, and Destination extend.
+#
 class Device(Process):
 
+    # Each Device has an ID.
     def __init__(self, ID):
         Process.__init__(self, name="Device" + str(ID))
         self.ID = ID
@@ -36,28 +44,39 @@ class Device(Process):
         # Implementation left to subclasses
         pass
 
-# Destination
-class Destination(Device):
 
+####################################################################################    
+# DESTINATION
+####################################################################################
+
+# 
+# Destination class - extends Device.
+#
+class Destination(Device):
+    
+    # Each Destination keeps track of its ID, the ID of its corresponding 
+    # Source, the 'throughput' monitor, and the 'packet delay' monitor.
     def __init__(self, ID, sourceID, throughput, packetDelay):
-        Device.__init__(self, ID) # call Device
+        Device.__init__(self, ID)        # call Device's constructor
         self.sourceID = sourceID
         self.numPacketsReceived = 0
-        self.totalPacketDelay = 0 # calculate the sum of the total packet delays
-        self.link = None
-        self.active = False
-        self.receivedPackets = [] # stores all the rec'd packets
-        self.currentAckPacketID = 0
-        self.throughput = throughput
-        self.packetDelay = packetDelay
-        self.packet = None
-        self.TCP = False
-        self.missingPackets = [] # which packets have we not received yet?
+        self.totalPacketDelay = 0        # calculate the sum of the total packet delays
+        self.link = None                 # keeps track of the link it is connected to
+        self.active = False              # is this process active?
+        self.receivedPackets = []        
+        self.currentAckPacketID = 0      # keeps track of the next id of the ack packet
+        self.throughput = throughput     # monitor - collects stats
+        self.packetDelay = packetDelay   # monitor - collects stats
+        self.packet = None               # the current packet we are dealing with
+        #TODO: change this self.TCP variable to whatever judy used
+        self.TCP = False  
+        self.missingPackets = []         # which packets have we not received yet?
 
+    # Attach a Link to this Destination.
     def addLink(self, link):
         self.link = link
         
-    # process packets as they arrive
+    # Process packets as they arrive
     def run(self):
         self.active = True
         while True:
@@ -70,8 +89,10 @@ class Destination(Device):
             self.link.buffMonitor.observe(len(self.link.queue))
             self.link.dropMonitor.observe(self.link.droppedPackets)
             
+            # at this point we have a packet to deal with
             assert(self.packet is not None)
             
+            # dont do anything if this is a router packet
             if not self.packet.isRouterMesg:
                 receivedTime = now()
                 
@@ -89,11 +110,11 @@ class Destination(Device):
                         
                         self.acknowledge(self.packet)
                             
-                        print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
+                        print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime) 
                 
                 # if we are doing FAST TCP
                 else:
-                    # if we are receiving the next consecutive packet (meaning we did not
+                    # if we are receiving the next consecutive packet (meaning we did not 
                     # lose anything yet), add packet to received packets list and ack this current packet
                     if (self.contains(self.packet.packetID - 1, self.receivedPackets)):
                         self.receivedPackets.append((self.packet.packetID, self.packet))
@@ -110,7 +131,7 @@ class Destination(Device):
                                 
                             print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
                     
-                    # if we get a packet that was missing, add to rec'd list and remove
+                    # if we get a packet that was missing, add to rec'd list and remove 
                     # from missing list; also ack this packet
                     elif (self.packet.packetID in self.missingPackets):
                         self.receivedPackets.append((self.packet.packetID, self.packet))
@@ -132,7 +153,7 @@ class Destination(Device):
                     # if there are missing packets between the current packet
                     # and the last received packet
                     else:
-                        # add missing packets starting at the id of the last
+                        # add missing packets starting at the id of the last 
                         # received packet (last element in received packets list) and the current packet
                         for i in range(self.receivedPackets[-1] + 1, self.packet.packetID):
                             self.missingPackets.append(i)
@@ -153,41 +174,44 @@ class Destination(Device):
                                 
                             print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
     
-    def contains(self, elem, list):
-        for (a, b) in list:
+    # Helper method to check if elem is within a list of tuples.
+    def contains(self, elem, lst):
+        for (a, b) in lst:
             if (a == elem):
                 return True
         return False
-    
-    
-    # called by link when it is time for packet to get to dest
+     
+    # Called by link when it is time for a packet to reach this Destionation.
     def receivePacket(self, packet):
         self.packet = packet
     
     # sends ack once it receives packet
     def acknowledge(self, packet):
-        ack = self.createAckPacket()
-
-        # send the ack packet (append it to this dest's link's queue)
         if not self.link.active:
             reactivate(self.link)
             self.link.active = True
-        self.link.queue.append(ack)
+        # send the ack packet (append it to the queue of this object's link)
+        self.link.queue.append(self.createAckPacket())
         
+    # Generate a new ack packet.
     def createAckPacket(self):
-        #(packetID, timeSent, sourceID, desID, isRouterMesg, isAck, myMessage, monitor)
         message = "Acknowledgement packet " + str(self.currentAckPacketID) + "'s data goes here!"
-
-        # need to instantiate monitor object to pass to ack packet
-        newPacket = Packet(self.currentAckPacketID, now(), self.ID,
+        # create the packet object with the needed ack packet id, source id, etc.
+        newPacket = Packet(self.currentAckPacketID, now(), self.ID, 
                            self.packet.sourceID, False, True, message)
-
         self.currentAckPacketID += 1
         activate(newPacket, newPacket.run())
-        return newPacket
-            
+        return newPacket             
 
 
+####################################################################################    
+# LINK
+####################################################################################
+
+#
+# Link class - extends Process. Links connect Sources, Routers, and Destinations, and
+# transmit Packets.
+#
 class Link(Process):
 
     def __init__(self, linkRate, start, end, propTime, bufferCapacity, buffMonitor, dropMonitor, flowMonitor):
@@ -202,11 +226,11 @@ class Link(Process):
         self.dropMonitor = dropMonitor
         self.flowMonitor = flowMonitor
         self.droppedPackets = 0
-        self.packetsSent = 0
+        self.packetsSent = 0        
         self.active = False
 
     # if link is active, self.active = True, otherwise, self.active = False
-    # Source can use this attribute to decide if it needs to reactivate the
+    # Source can use this attribute to decide if it needs to reactivate the  
     # link
     def run(self):
         self.active = True
@@ -227,7 +251,12 @@ class Link(Process):
             packet.propTime = self.propTime
             packet.device = self.end
             reactivate(packet)
-            print "t = %.2f: Job-%s departs" % (now(), str(packet.packetID))
+            print "t = %.2f: Job-%s departs" % (now(), str(packet.packetID))        
+
+
+####################################################################################    
+# PACKET
+####################################################################################
 
 #packet:
 #- packet is a process
@@ -488,15 +517,7 @@ class Router(Device):
                     activate(pkt, pkt.run())
                     self.sendPacket(pkt, self.routingTable[i])
     
-PACKET_SIZE = 8000
-#INIT_WINDOW_SIZE = 1000
-INIT_WINDOW_SIZE = 1
-THRESHOLD = 50
-ACK_TIMEOUT = 2000 # NEED TO ESTIMATE LATER
-DYNAMIC_ROUTING = True
-PROBE_DROP_DELAY = 30
-PROBE_SAMPLE_SIZE = 30
-PROBE_RATE = 15
+
 # Source
 class Source(Device):
 
