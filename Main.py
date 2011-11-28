@@ -158,6 +158,10 @@ class Destination(Device):
                     # add the current packet to the rec'd list since we did receive it
                     self.receivedPackets.append(self.packet.packetID)
                     
+                    self.numPacketsReceived += 1
+                    # add to the aggregate delay across all packets
+                    self.totalPacketDelay += (receivedTime - self.packet.timeSent)
+                    
                 # send ack to currentAckPacketID packet and collect stats (happens always)
                 if not now() == 0:
                     self.acknowledge()
