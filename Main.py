@@ -43,10 +43,13 @@ class Destination(Device):
         self.totalPacketDelay = 0   # calculate the sum of the total packet delays
         self.link = None
         self.active = False
-        self.receivedPackets = {}  # stores all the rec'd packets
+        self.receivedPackets = []  # stores all the rec'd packets
+        self.currentAckPacketID = 0
         self.throughput = throughput
         self.packetDelay = packetDelay
         self.packet = None
+        self.TCP = False 
+        self.missingPackets = [] # which packets have we not received yet?
 
     def addLink(self, link):
         self.link = link
@@ -68,20 +71,92 @@ class Destination(Device):
             
             if not self.packet.isRouterMesg:
                 receivedTime = now()
-                if not self.packet.packetID in self.receivedPackets:
-                    self.receivedPackets[self.packet.packetID] = receivedTime
-                    self.numPacketsReceived += 1
-            
-                currDelay = receivedTime - self.packet.timeSent
-                self.totalPacketDelay += currDelay
-                if not now() == 0:
-                    self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
-                    self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
                 
-                    self.acknowledge(self.packet)
-            
-                    print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
-            
+                # if we are simply doing AIMD
+                if (self.TCP == False):
+                    self.receivedPackets.append((self.packet.packetID, self.packet))
+                    self.numPacketsReceived += 1
+                    # find the aggregate delay across all packets
+                    self.totalPacketDelay += (receivedTime - self.packet.timeSent)
+                    
+                    if not now() == 0:
+                        # collect stats
+                        self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
+                        self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
+                        
+                        self.acknowledge(self.packet)
+                            
+                        print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime) 
+                
+                # if we are doing FAST TCP
+                else:
+                    # if we are receiving the next consecutive packet (meaning we did not 
+                    # lose anything yet), add packet to received packets list and ack this current packet
+                    if (self.contains(self.packet.packetID - 1, self.receivedPackets)):
+                        self.receivedPackets.append((self.packet.packetID, self.packet))
+                        self.numPacketsReceived += 1
+                        # add to the aggregate delay across all packets
+                        self.totalPacketDelay += (receivedTime - self.packet.timeSent)
+                        
+                        if not now() == 0:
+                            # collect stats
+                            self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
+                            self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
+    
+                            self.acknowledge(self.packet)
+                                
+                            print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
+                    
+                    # if we get a packet that was missing, add to rec'd list and remove 
+                    # from missing list; also ack this packet
+                    elif (self.packet.packetID in self.missingPackets):
+                        self.receivedPackets.append((self.packet.packetID, self.packet))
+                        self.numPacketsReceived += 1
+                        # add to the aggregate delay across all packets
+                        self.totalPacketDelay += (receivedTime - self.packet.timeSent)
+                        
+                        self.missingPackets.remove(self.packet.packetID)
+                        
+                        if not now() == 0:
+                            # collect stats
+                            self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
+                            self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
+    
+                            self.acknowledge(self.packet)
+                                
+                            print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
+                    
+                    # if there are missing packets between the current packet
+                    # and the last received packet
+                    else:
+                        # add missing packets starting at the id of the last 
+                        # received packet (last element in received packets list) and the current packet
+                        for i in range(self.receivedPackets[-1] + 1, self.packet.packetID):
+                            self.missingPackets.append(i)
+                        
+                        # send ack for the last received packet
+                        (packID, pack) = self.receivedPackets[-1]
+                        
+                        # assume received packets is sorted
+                        self.acknowledge(pack)
+                        
+                        # add the current packet to the rec'd list since we did receive it
+                        self.receivedPackets.append((self.packet.packetID, self.packet))
+                        
+                        if not now() == 0:
+                            # collect stats
+                            self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
+                            self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
+                                
+                            print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
+    
+    def contains(self, elem, list):
+        for (a, b) in list:
+            if (a == elem):
+                return True
+        return False
+    
+    
     # called by link when it is time for packet to get to dest
     def receivePacket(self, packet):
         self.packet = packet
@@ -98,14 +173,15 @@ class Destination(Device):
         
     def createAckPacket(self):
         #(packetID, timeSent, sourceID, desID, isRouterMesg, isAck, myMessage, monitor)
-        message = "Acknowledgement packet " + str(self.packet.packetID) + "'s data goes here!"
+        message = "Acknowledgement packet " + str(self.currentAckPacketID) + "'s data goes here!"
 
         # need to instantiate monitor object to pass to ack packet
-        newPacket = Packet(self.packet.packetID, now(), self.ID, 
+        newPacket = Packet(self.currentAckPacketID, now(), self.ID, 
                            self.packet.sourceID, False, True, message)
 
+        self.currentAckPacketID += 1
         activate(newPacket, newPacket.run())
-        return newPacket 
+        return newPacket  
             
 
 
