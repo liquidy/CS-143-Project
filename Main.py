@@ -7,7 +7,7 @@ import sys
 PACKET_SIZE = 8000
 #INIT_WINDOW_SIZE = 1000
 INIT_WINDOW_SIZE = 1
-THRESHOLD = 50
+THRESHOLD = 100
 ACK_TIMEOUT = 2000 # NEED TO ESTIMATE LATER
 DYNAMIC_ROUTING = True
 PROBE_DROP_DELAY = 30
@@ -525,7 +525,7 @@ class Source(Device):
         Device.__init__(self, ID)
         self.destinationID = destinationID
         self.bitsToSend = bitsToSend
-        self.congControlAlg = congControlAlg
+        self.congControlAlg = 'AIMD'
         self.roundTripTime = 0
         self.windowSize = INIT_WINDOW_SIZE
         self.currentPacketID = 0
@@ -535,7 +535,7 @@ class Source(Device):
         self.active = False
         self.sendRateMonitor = sendRateMonitor
         self.windowSizeMonitor = windowSizeMonitor
-        self.numMissingAcks = 5f
+        self.numMissingAcks = 5
         self.missingAck = 0
         self.numPacketsSent = 0
         self.timeout = ACK_TIMEOUT
@@ -571,7 +571,7 @@ class Source(Device):
                     if packetIdToRetransmit != -1:
                         self.fastRecovery = True
                         self.windowSize = self.windowSize / 2
-            elif self.fastRecovery:
+            if self.fastRecovery:
                 # For every 3 dup acks received, get the packetID for retransmit
                 packetIdToRetransmit = self.getPacketIdToRetransmit()
                 self.acks[packetIdToRetransmit] = 0
@@ -586,7 +586,7 @@ class Source(Device):
                 self.sendPacketAgain(newPacket)
                 
             # If everything has been sent, go to sleep
-            elif (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
+            if (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
                 self.active = False
                 yield passivate, self
                 self.active = True
@@ -604,7 +604,6 @@ class Source(Device):
                     self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
             # nothing to retransmit and cannot send new packets
             else:
-                assert(False)
                 self.active = False
                 yield passivate, self
                 self.active = True
@@ -658,9 +657,9 @@ class Source(Device):
         if packet.isAck and packet.packetID in self.outstandingPackets and not packet.isRouterMesg:
             del self.outstandingPackets[packet.packetID]
             # Add ack to self.acks
-            if not packetID in self.acks:
-                self.acks[packetID] = 0
-            self.acks[packetID] += 1
+            if not packet.packetID in self.acks:
+                self.acks[packet.packetID] = 0
+            self.acks[packet.packetID] += 1
             
             # Update window size
             if not self.enabledCCA:
@@ -669,6 +668,7 @@ class Source(Device):
                 self.windowSize += 1/float(math.floor(self.windowSize))
             elif self.congControlAlg == 'VEGAS':
                 #TODO: implement TCP Vegs
+                pass
             else:
                 print "Error for congestion control"
                 assert(False)
@@ -817,6 +817,7 @@ for i in range(len(topology)):
 simulate(until = 5000)
 
 ### Plot and save all the measurements.
+print 'producing graphs...'
 n = 0
 for m in throughputs:
     plt.plot(m.tseries(), m.yseries(),'o')
