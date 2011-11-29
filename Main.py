@@ -9,8 +9,8 @@ PACKET_SIZE = 8000
 #INIT_WINDOW_SIZE = 1000
 INIT_WINDOW_SIZE = 1
 THRESHOLD = 100
-ACK_TIMEOUT = 200 # NEED TO ESTIMATE LATER
-DYNAMIC_ROUTING = True
+ACK_TIMEOUT = 1000 # NEED TO ESTIMATE LATER
+DYNAMIC_ROUTING = False
 PROBE_DROP_DELAY = 30
 PROBE_SAMPLE_SIZE = 30
 PROBE_RATE = 15
@@ -98,6 +98,22 @@ class Destination(Device):
             # dont do anything if this is a router packet
             if not self.packet.isRouterMesg:
                 receivedTime = now()
+                
+                # if we are doing AIMD
+#                if (self.congControlAlg == 'AIMD'):
+#                    self.receivedPackets.append((self.packet.packetID, self.packet))
+#                    self.numPacketsReceived += 1
+#                    # find the aggregate delay across all packets
+#                    self.totalPacketDelay += (receivedTime - self.packet.timeSent)
+#                    
+#                    if not now() == 0:
+#                        # collect stats
+#                        self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
+#                        self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
+#                        
+#                        self.acknowledge(self.packet)
+#                            
+#                        print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime) 
 
                 # if we are receiving the next consecutive packet (meaning we did not 
                 # lose anything yet), add packet to received packets list and ack this current packet
@@ -121,17 +137,11 @@ class Destination(Device):
                     # add to the aggregate delay across all packets
                     self.totalPacketDelay += (receivedTime - self.packet.timeSent)
                     
-                    # this packet is no loner missing!
+                    # this packet is no longer missing!
                     self.missingPackets.remove(self.packet.packetID)
                     
-                    # if we still have missing packets, acknowledge the smallest id of those
-                    if len(self.missingPackets) > 0:
-                        # send ack for packet in missing list with smallest id
-                        self.currentPacketIDToAck = min(self.missingPackets) - 1
-                    # if we have nothing missing, acknowledge the last packet received (last id)
-                    else:
-                        self.receivedPackets.sort()
-                        self.currentPacketIDToAck = self.receivedPackets[-1]
+                    # send ack for packet in missing list with smallest id
+                    self.currentPacketIDToAck = min(self.missingPackets) - 1
                     
                 # if there are missing packets between the current packet
                 # and the last received packet
@@ -504,7 +514,7 @@ class Router(Device):
 # Source
 class Source(Device):
 
-    def __init__(self, ID, destinationID, bitsToSend, congControlAlg, sendRateMonitor, windowSizeMonitor):
+    def __init__(self, ID, destinationID, bitsToSend, congControlAlg, startTime, sendRateMonitor, windowSizeMonitor):
         Device.__init__(self, ID)
         self.destinationID = destinationID
         self.bitsToSend = bitsToSend
@@ -518,6 +528,7 @@ class Source(Device):
         self.active = False
         self.sendRateMonitor = sendRateMonitor
         self.windowSizeMonitor = windowSizeMonitor
+        self.startTime = startTime
         self.numMissingAcks = 5
         self.missingAck = 0
         self.numPacketsSent = 0
@@ -541,16 +552,27 @@ class Source(Device):
     def run(self):
         self.active = True
         packetIdToRetransmit = -1
-        while True:
+        yield hold, self, self.startTime
+        while True:       
+            packetIdToRetransmit = self.getPacketIdToRetransmit()
+            if self.enabledCCA and not self.fastRecovery and packetIdToRetransmit!= -1:
+                # Enter Fast Recovery if necessary
+                self.fastRecovery = True
+                self.windowSize = self.windowSize / 2                
             
-            if self.enabledCCA:
-                if not self.fastRecovery:
-                    # Enter Fast Recovery if necessary
-                    packetIdToRetransmit = self.getPacketIdToRetransmit()
-                    if packetIdToRetransmit != -1:
-                        self.fastRecovery = True
-                        self.windowSize = self.windowSize / 2
-                        
+            if self.fastRecovery and packetIdToRetransmit != -1:
+                # For every 3 dup acks received, get the packetID for retransmit
+                self.acks[packetIdToRetransmit-1] = 0
+                assert(packetIdToRetransmit != -1)
+                
+                # Create a new packet based on the packetID, and resent the packet
+                message = "Packet " + str(packetIdToRetransmit) + "'s data goes here!"
+                # packetId, timesent, sourceID, destid, isroutermsg, isack, msg
+                newPacket = Packet(packetIdToRetransmit, now(), self.ID,
+                        self.destinationID, False, False, message)
+                activate(newPacket, newPacket.run())
+                self.sendPacketAgain(newPacket)
+                yield hold, self, newPacket.size/float(self.link.linkRate)
             # resend anything, if need to
             elif len(self.toRetransmit) > 0:
                 (didtransmit, p) = self.retransmitPacket()
@@ -562,22 +584,8 @@ class Source(Device):
                         self.link.dropMonitor.observe(self.link.droppedPackets)
                         self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
                 
-            if self.fastRecovery:
-                # For every 3 dup acks received, get the packetID for retransmit
-                packetIdToRetransmit = self.getPacketIdToRetransmit()
-                self.acks[packetIdToRetransmit] = 0
-                assert(packetIdToRetransmit != -1)
-                
-                # Create a new packet based on the packetID, and resent the packet
-                message = "Packet " + str(packetIdToRetransmit) + "'s data goes here!"
-                # packetId, timesent, sourceID, destid, isroutermsg, isack, msg
-                newPacket = Packet(packetIdToRetransmit, now(), self.ID,
-                        self.destinationID, False, False, message)
-                activate(newPacket, newPacket.run())
-                self.sendPacketAgain(newPacket)
-                
             # If everything has been sent, go to sleep
-            if (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
+            elif (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
                 self.active = False
                 yield passivate, self
                 self.active = True
@@ -647,19 +655,24 @@ class Source(Device):
         self.link.queue.append(packet)
         
     def receivePacket(self, packet):
-        if packet.isAck and packet.packetID in self.outstandingPackets and not packet.isRouterMesg:
-            del self.outstandingPackets[packet.packetID]
-            # Add ack to self.acks
+        if packet.isAck:
+            # Count Acks
             if not packet.packetID in self.acks:
                 self.acks[packet.packetID] = 0
             self.acks[packet.packetID] += 1
             
+            # Remove the outstanding packets from the list
+            if packet.packetID in self.outstandingPackets:
+                for key in self.outstandingPackets.keys():
+                    if key <= packet.packetID:
+                        del self.outstandingPackets[key]
+                        
             # Update window size
             if not self.enabledCCA:
                 self.windowSize += 1
-            elif self.congControlAlg == 'AIMD':
+            elif self.congControlAlg == 'AIMD' and self.fastRecovery == False:
                 self.windowSize += 1/float(math.floor(self.windowSize))
-            elif self.congControlAlg == 'VEGAS':
+            elif self.congControlAlg == 'VEGAS' and self.fastRecovery == False:
                 packetRttTime = now() - self.timePacketWasSent[packet.packetID]
                 # Set rttMin if has not been set yet
                 if self.rttMin == 0:
@@ -674,6 +687,14 @@ class Source(Device):
                     self.windowSize += 1
                 else:
                     self.windowSize -= 1
+            # Get out fast recovery once a new ack is received
+            elif self.fastRecovery and self.mostRecentAck < packet.packetID:
+                self.mostRecentAck = packet.packetID
+                self.fastRecovery = False 
+                # In fast recovery, increase the window size for receiving the same ack
+            # This allow sending new packets during fast recovery
+            elif self.fastRecovery and self.mostRecentAck == packet.packetID:
+                self.windowSize += 1
             else:
                 print "Error: Congestion control algorithm not found."
                 assert(False)
@@ -681,15 +702,7 @@ class Source(Device):
             # Enable either AIMD or Vegas if windowSize > threshold
             if self.windowSize > THRESHOLD:
                 self.enabledCCA = True
-            # Get out fast recovery once a new ack is received
-            if self.mostRecentAck < packet.packetID:
-                self.mostRecentAck = packet.packetID
-                self.fastRecovery = False
-            # In fast recovery, increase the window size for receiving the same ack
-            # This allow sending new packets during fast recovery
-            if self.fastRecovery and self.mostRecentAck == packet.packetID:
-                self.windowSize += 1
-                
+                        
             # Collecting Stats
             self.windowSizeMonitor.observe(self.windowSize)
             print 'Ack received. ID: ' + str(packet.packetID)
@@ -705,7 +718,7 @@ class Source(Device):
                 minId = key
         if minId == sys.maxint:
             return -1
-        return minId
+        return minId + 1
        
        
 # Timer
@@ -731,13 +744,11 @@ class Timer(Process):
                 global THRESHOLD
                 # When time out, update variables to slow start
                 self.source.enabledCCA = False
+                self.source.fastRecovery = False
                 THRESHOLD = THRESHOLD / 2
                 self.source.windowSize = 1
                 
                 self.source.missingAck += 1
-                #if (self.source.missingAck == self.source.numMissingAcks):
-                #    self.source.windowSize = self.source.windowSize / 2
-                #    self.source.windowSizeMonitor.observe(self.source.windowSize)
                     
                 #Add packet to source's queue for retransmit the timeout packet
                 self.source.toRetransmit.append(self.createPacket(self.packet))
@@ -795,8 +806,17 @@ initialize()
 #                 [[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1]],
 #                 [[-1],[-1],[-1],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1]] ]
 
-topology = [[[-1],[-1],[0, 10000, 15, 64],[-1],[-1],[1]], [[-1],[-1],[-1],[-1],[-1],[0, 10000, 15, 64]], [[0, 10000, 15, 64],[-1],[-1],[1, 10000, 15, 64],[1, 10000, 15, 64],[-1]], [[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[0, 10000, 15, 64]], [[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[0, 10000, 15, 64]], [[-1],[0, 10000, 15, 64],[-1],[0, 10000, 15, 64],[0, 10000, 15, 64],[-1]]]
-nodes = [[1, 1, 0, 0, 1, 10000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
+nodes = [[1,1,0,0,1,80000000,0,0],[1,0,1,0,1,0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[1,1,0,6,7,40000000,0,2000],[1,0,1,6,7,0,0,0],[1,1,0,8,9,40000000,0,4000],[1,0,1,8,9,0,0,0]]
+topology = [ [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+             [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]],
+             [[0,10000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1]],
+             [[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1],[-1]],
+             [[-1],[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1]],
+             [[-1],[0,10000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1],[0,10000,10,128]],
+             [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+             [[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
+             [[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1]],
+             [[-1],[-1],[-1],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1]] ]
 
 # Global variables used to determine when to stop the simulation. 
 numFlows = 0
@@ -816,7 +836,7 @@ droppedPackets = []
 linkFlowRates = []
 
 # Output is written to files with names such as outputName+"throughputs(n).png"
-outputName = 'TestCase1'
+outputName = 'TestCase2noDynamic'
 
 # For each device in the nodes, instantiate the appropriate device with its monitors
 for id in range(len(nodes)):
@@ -829,9 +849,9 @@ for id in range(len(nodes)):
         windowSizeMonitor = Monitor(name = 'Window Size of Source '+str(id))
         
         # Create the object, add it to the list of devices, and activate it
-        source = Source(id, nodes[id][4], nodes[id][5], nodes[id][6], sendRateMonitor,windowSizeMonitor)
+        source = Source(id, nodes[id][4], nodes[id][5], nodes[id][6], nodes[id][7], sendRateMonitor,windowSizeMonitor)
         devices.append(source)
-        activate(source, source.run(), at=nodes[id][7])
+        activate(source, source.run())
         
         # If this node should be monitored, add its monitors to the arrays
         if nodes[id][0]:
@@ -890,7 +910,7 @@ for i in range(len(topology)):
                 droppedPackets.append(dropPacket)
             
 # The Main Simulation!               
-simulate(until = 5000)
+simulate(until = 25000)
 
 # Plot and save all the appropriate measurements. Output files are named outputName+data+(n).png.
 print 'producing graphs...'
