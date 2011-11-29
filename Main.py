@@ -765,24 +765,40 @@ class Timer(Process):
                            packet.desID, packet.isRouterMesg, packet.isAck, message)
         activate(newPacket, newPacket.run())
         return newPacket
-    
 
-            
+
+
 # MAIN STARTS HERE
 
-# main takes the following arguments:
-# topology[][][], a 3-way array with topology[i][j] being the list [monitored, rate, propogation delay, buffer capacity] for the link between nodes i and j,
-# and -1 if one does not exist
-# nodes[][], a 2-way array with nodes[i] being the list
-# [monitored, isSource, isDest, sourceID, destID, numbits, congID, starttime, bufferCapacity]
-
 initialize()
-topology = [[[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[1]], [[-1],[-1],[-1],[-1],[-1],[1, 10000, 15, 64]], [[1, 10000, 15, 64],[-1],[-1],[1, 10000, 15, 64],[1, 10000, 15, 64],[-1]], [[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[1, 10000, 15, 64]], [[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[1, 10000, 15, 64]], [[-1],[1, 10000, 15, 64],[-1],[1, 10000, 15, 64],[1, 10000, 15, 64],[-1]]]
+
+# The input parameters: 
+# 
+# topology[][][] is a 3-way array with topology[i][j] being the list [isMonitored, rate, propTime, bufferCapacity] for the link between nodes i and j,
+# and [-1] if one does not exist. 
+# 
+# nodes[][] is a 2-way array with nodes[i] being the list [isMonitored,isSource,isDest,sourceID,destID,numbits,congID,starttime] if the node is a source
+# or destination, and [0,0,0] otherwise if it is a router. 
+#
+# Common test cases are the following:
+# Test Case 1:
+#    topology = [[[-1],[-1],[0, 10000, 15, 64],[-1],[-1],[1]], [[-1],[-1],[-1],[-1],[-1],[0, 10000, 15, 64]], [[0, 10000, 15, 64],[-1],[-1],[1, 10000, 15, 64],[1, 10000, 15, 64],[-1]], [[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[0, 10000, 15, 64]], [[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[0, 10000, 15, 64]], [[-1],[0, 10000, 15, 64],[-1],[0, 10000, 15, 64],[0, 10000, 15, 64],[-1]]]
+#    nodes = [[1, 1, 0, 0, 1, 10000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
+#
+# Test Case 2: 
+
+topology = [[[-1],[-1],[0, 10000, 15, 64],[-1],[-1],[1]], [[-1],[-1],[-1],[-1],[-1],[0, 10000, 15, 64]], [[0, 10000, 15, 64],[-1],[-1],[1, 10000, 15, 64],[1, 10000, 15, 64],[-1]], [[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[0, 10000, 15, 64]], [[-1],[-1],[1, 10000, 15, 64],[-1],[-1],[0, 10000, 15, 64]], [[-1],[0, 10000, 15, 64],[-1],[0, 10000, 15, 64],[0, 10000, 15, 64],[-1]]]
 nodes = [[1, 1, 0, 0, 1, 10000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
+
+# Global variables used to determine when to stop the simulation. 
 numFlows = 0
 flowsDone = 0
+
+# Global Arrays of the Network Objects. Devices includes all the Sources, Destinations, and Routers, and links includes all the link objects.
 devices = []
 links = []
+
+# Global Arrays containing the Monitors that observe the relevant data
 throughputs = []
 sendRates = []
 windowSizes = []
@@ -790,116 +806,161 @@ packetDelays = []
 bufferOccs = []
 droppedPackets = []
 linkFlowRates = []
-#For each device in the nodes, instantiate the appropriate device with its monitors
+
+# Output is written to files with names such as outputName+"throughputs(n).png"
+outputName = 'TestCase1'
+
+# For each device in the nodes, instantiate the appropriate device with its monitors
 for id in range(len(nodes)):
+    # If the device is a source ...
     if nodes[id][1]:
         numFlows += 1
+        
+        # Create the monitors
         sendRateMonitor = Monitor(name = 'Send Rate of Source ' + str(id))
         windowSizeMonitor = Monitor(name = 'Window Size of Source '+str(id))
-        devices.append(Source(id, nodes[id][4], nodes[id][5], nodes[id][6], sendRateMonitor,windowSizeMonitor))
-        activate(devices[id], devices[id].run(), at=nodes[id][7])
+        
+        # Create the object, add it to the list of devices, and activate it
+        source = Source(id, nodes[id][4], nodes[id][5], nodes[id][6], sendRateMonitor,windowSizeMonitor)
+        devices.append(source)
+        activate(source, source.run(), at=nodes[id][7])
+        
+        # If this node should be monitored, add its monitors to the arrays
         if nodes[id][0]:
             sendRates.append(sendRateMonitor)
             windowSizes.append(windowSizeMonitor)
+            
+    # If the device is a destination ...        
     elif nodes[id][2]:
+        
+        # Create the Monitors 
         thru = Monitor(name = 'Throughput to Destination ' + str(id))
-        throughputs.append(thru)
         pDelay = Monitor(name = 'Packet Delays of Destination ' + str(id))
-        devices.append(Destination(id, nodes[id][3], thru, pDelay))
-        activate(devices[id], devices[id].run())
+        
+        # Create the object, add it to the list of devices, and activate it
+        dest = Destination(id, nodes[id][3], thru, pDelay)
+        devices.append(dest)
+        activate(dest, dest.run())
+        
+        # If this node should be monitored, add its monitors to the arrays
         if nodes[id][0]:
             packetDelays.append(pDelay)
+            throughputs.append(thru)
+
+    # Otherwise the device is a router ...
     else:
-        devices.append(Router(id, topology))
-        activate(devices[id], devices[id].run())
+        
+        # Create the object, add it to the list of devices, and activate it
+        router = Router(id,topology)
+        devices.append(router)
+        activate(router, router.run())
                             
-#For each link in the topology, instantiate the appropriate link with its monitors
+# For each link in the topology, instantiate the appropriate link with its monitors
 for i in range(len(topology)):
     for j in range(len(topology[i])):
+        
+        # If there is a link between node i and node j (i.e. topology[i][j] isn't [-1]) ...
         if len(topology[i][j]) > 1:
+            
+            # Create the monitors
+            buffOcc = Monitor(name = 'Buffer Occupancies of the Link From ' + str(i) + ' to ' + str(j))
+            dropPacket = Monitor(name = 'Dropped Packets of the Link From ' + str(i) + ' to ' + str(j))
+            flowRate = Monitor(name = 'Link Flow Rate of the Link From ' + str(i) + ' to ' + str(j))
+            
+            # Create the object, add it to the list of links, and activate it
+            link = Link(topology[i][j][1], devices[i], devices[j], topology[i][j][2], topology[i][j][3], buffOcc, dropPacket, flowRate)
+            links.append(link)            
+            activate(link, link.run())
+            
+            # Tell device i that it is connected to this link object
+            devices[i].addLink(link)
+            
+            # If this link should be monitored, add its monitors to the arrays
             if topology[i][j][0]:
-                buffOcc = Monitor(name = 'Buffer Occupancies of the Link From ' + str(i) + ' to ' + str(j))
-                dropPacket = Monitor(name = 'Dropped Packets of the Link From ' + str(i) + ' to ' + str(j))
-                flowRate = Monitor(name = 'Link Flow Rate of the Link From ' + str(i) + ' to ' + str(j))
                 linkFlowRates.append(flowRate)
                 bufferOccs.append(buffOcc)
                 droppedPackets.append(dropPacket)
-            link = Link(topology[i][j][1], devices[i], devices[j], topology[i][j][2], topology[i][j][3], buffOcc, dropPacket, flowRate)
-            activate(link, link.run())
-            links.append(link)
-            devices[i].addLink(link)
-                
+            
+# The Main Simulation!               
 simulate(until = 5000)
 
-### Plot and save all the measurements.
+# Plot and save all the appropriate measurements. Output files are named outputName+data+(n).png.
 print 'producing graphs...'
+
+# Throughputs
 n = 0
 for m in throughputs:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
-    plt.savefig("top2throughput" + str(n) + ".png")
+    plt.savefig(outputName+"throughput" + str(n) + ".png")
     plt.clf()
     n += 1
     
+# Send Rates    
 n = 0
 for m in sendRates:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
-    plt.savefig("top2sendRate" + str(n) + ".png")
+    plt.savefig(outputName+"sendRate" + str(n) + ".png")
     plt.clf()
     n += 1
 
+# Packet Delays
 n = 0
 for m in packetDelays:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Time")
-    plt.savefig("top2packetDelay" + str(n) + ".png")
+    plt.savefig(outputName+"packetDelay" + str(n) + ".png")
     plt.clf()
     n += 1
-    
+
+# Buffer Occupancies    
 n = 0
 for m in bufferOccs:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Packets")
-    plt.savefig("top2bufferOccupancies" + str(n) + ".png")
+    plt.savefig(outputName+"bufferOccupancies" + str(n) + ".png")
     plt.clf()
     n += 1
-    
+
+# Dropped Packets    
 n = 0
 for m in droppedPackets:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Packets")
-    plt.savefig("top2droppedPackets" + str(n) + ".png")
+    plt.savefig(outputName+"droppedPackets" + str(n) + ".png")
     plt.clf()
     n += 1
-    
+
+# Link Flow Rates    
 n = 0
 for m in linkFlowRates:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
-    plt.savefig("top2linkSendRate" + str(n) + ".png")
+    plt.savefig(outputName+"linkSendRate" + str(n) + ".png")
     plt.clf()
     n += 1
-    
+
+# Window Sizes    
 n = 0
 for m in windowSizes:
     plt.plot(m.tseries(), m.yseries(),'o')
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Packets")
-    plt.savefig("top2windowSizes" + str(n) + ".png")
+    plt.savefig(outputName+"windowSizes" + str(n) + ".png")
     plt.clf()
     n += 1
 
