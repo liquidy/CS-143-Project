@@ -98,22 +98,6 @@ class Destination(Device):
             # dont do anything if this is a router packet
             if not self.packet.isRouterMesg:
                 receivedTime = now()
-                
-                # if we are doing AIMD
-#                if (self.congControlAlg == 'AIMD'):
-#                    self.receivedPackets.append((self.packet.packetID, self.packet))
-#                    self.numPacketsReceived += 1
-#                    # find the aggregate delay across all packets
-#                    self.totalPacketDelay += (receivedTime - self.packet.timeSent)
-#                    
-#                    if not now() == 0:
-#                        # collect stats
-#                        self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
-#                        self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
-#                        
-#                        self.acknowledge(self.packet)
-#                            
-#                        print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime) 
 
                 # if we are receiving the next consecutive packet (meaning we did not 
                 # lose anything yet), add packet to received packets list and ack this current packet
@@ -140,8 +124,14 @@ class Destination(Device):
                     # this packet is no loner missing!
                     self.missingPackets.remove(self.packet.packetID)
                     
-                    # send ack for packet in missing list with smallest id
-                    self.currentPacketIDToAck = min(self.missingPackets) - 1
+                    # if we still have missing packets, acknowledge the smallest id of those
+                    if len(self.missingPackets) > 0:
+                        # send ack for packet in missing list with smallest id
+                        self.currentPacketIDToAck = min(self.missingPackets) - 1
+                    # if we have nothing missing, acknowledge the last packet received (last id)
+                    else:
+                        self.receivedPackets.sort()
+                        self.currentPacketIDToAck = self.receivedPackets[-1]
                     
                 # if there are missing packets between the current packet
                 # and the last received packet
