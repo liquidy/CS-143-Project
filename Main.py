@@ -742,7 +742,7 @@ class Timer(Process):
                 # When time out, update variables to slow start
                 self.source.enabledCCA = False
                 THRESHOLD = THRESHOLD / 2
-                self.windowSize = 1
+                self.source.windowSize = 1
                 
                 self.source.missingAck += 1
                 #if (self.source.missingAck == self.source.numMissingAcks):
