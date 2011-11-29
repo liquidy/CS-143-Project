@@ -1,4 +1,5 @@
 from SimPy.Simulation import *
+from collections import deque
 import numpy as py
 import matplotlib.pyplot as plt
 import math
@@ -13,6 +14,9 @@ DYNAMIC_ROUTING = True
 PROBE_DROP_DELAY = 30
 PROBE_SAMPLE_SIZE = 30
 PROBE_RATE = 15
+DEFAULT_ALPHA = 50
+NUM_PACKETS_TO_TRACK_FOR_RTT = 10
+CONGESTION_CONTROL_ALGORITHM = "AIMD"
 
 ####################################################################################
 # DEVICE
@@ -514,7 +518,7 @@ class Source(Device):
         Device.__init__(self, ID)
         self.destinationID = destinationID
         self.bitsToSend = bitsToSend
-        self.congControlAlg = 'AIMD'
+        self.congControlAlg = CONGESTION_CONTROL_ALGORITHM
         self.roundTripTime = 0
         self.windowSize = INIT_WINDOW_SIZE
         self.currentPacketID = 0
@@ -529,11 +533,17 @@ class Source(Device):
         self.numPacketsSent = 0
         self.timeout = ACK_TIMEOUT
         self.enabledCCA = False
+        self.alpha = DEFAULT_ALPHA
         
-        # For congestion control, it stores packageID to count
+        # Variables for congestion control
         self.acks = {}
         self.mostRecentAck = 0
         self.fastRecovery = False
+        self.rttMin = 0 # RTT for first packet
+        self.rtt = 0 # Average RTT for the last "numPacketsToTrack" packets
+        self.packetRttsToTrack = deque() # Queue tracking the last "numPacketsToTrack" packet RTTs
+        self.numPacketsToTrack = NUM_PACKETS_TO_TRACK_FOR_RTT  # Number of packets to track in packetRttsToTrack
+        self.timePacketWasSent = {} # Dict that records the time that a packet was set
 
     def addLink(self, link):
         self.link = link
@@ -630,7 +640,8 @@ class Source(Device):
         if (PACKET_SIZE * self.numPacketsSent < self.bitsToSend):
             self.numPacketsSent += 1
             self.outstandingPackets[packet.packetID] = True
-            if (self.link.active is not True):
+            self.timePacketWasSent[packet.packetID] = now()
+            if self.link.active is False:
                 reactivate(self.link)
                 self.link.active = True
             self.link.queue.append(packet)
@@ -639,7 +650,8 @@ class Source(Device):
             activate(t, t.run())
     
     def sendPacketAgain(self, packet):
-        if (self.link.active is not True):
+        self.timePacketWasSent[packet.packetID] = now()
+        if self.link.active is False:
             reactivate(self.link)
             self.link.active = True
         self.link.queue.append(packet)
@@ -658,10 +670,22 @@ class Source(Device):
             elif self.congControlAlg == 'AIMD':
                 self.windowSize += 1/float(math.floor(self.windowSize))
             elif self.congControlAlg == 'VEGAS':
-                #TODO: implement TCP Vegs
-                pass
+                packetRttTime = now() - self.timePacketWasSent[packet.packetID]
+                # Set rttMin if has not been set yet
+                if self.rttMin == 0:
+                    self.rttMin = packetRttTime
+                # Update packetRttsToTrack
+                self.packetRttsToTrack.append(packetRttTime)
+                if len(packetsRttsToTrack) > self.numPacketsToTrack:
+                    self.packetsRttsToTrack.popleft()
+                self.rtt = sum(self.packetRttsToTrack) / len(self.packetRttsToTrack)
+                # Update window size accordingly
+                if (self.windowSize / self.rttMin - self.windowSize / self.rtt) < self.alpha:
+                    self.windowSize += 1
+                else:
+                    self.windowSize -= 1
             else:
-                print "Error for congestion control"
+                print "Error: Congestion control algorithm not found."
                 assert(False)
             
             # Enable either AIMD or Vegas if windowSize > threshold
@@ -691,7 +715,6 @@ class Source(Device):
                 minId = key
         if minId == sys.maxint:
             return -1
-        #self.acks[minId] = 0
         return minId
        
        
