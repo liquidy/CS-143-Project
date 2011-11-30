@@ -97,33 +97,15 @@ class Destination(Device):
             
             # dont do anything if this is a router packet
             if not self.packet.isRouterMesg:
-                receivedTime = now()
+                # add to the aggregate delay across all packets
+                self.totalPacketDelay += (now() - self.packet.timeSent)
+                self.numPacketsReceived += 1
                 
-                # if we are doing AIMD
-#                if (self.congControlAlg == 'AIMD'):
-#                    self.receivedPackets.append((self.packet.packetID, self.packet))
-#                    self.numPacketsReceived += 1
-#                    # find the aggregate delay across all packets
-#                    self.totalPacketDelay += (receivedTime - self.packet.timeSent)
-#                    
-#                    if not now() == 0:
-#                        # collect stats
-#                        self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
-#                        self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
-#                        
-#                        self.acknowledge(self.packet)
-#                            
-#                        print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime) 
-
                 # if we are receiving the next consecutive packet (meaning we did not 
                 # lose anything yet), add packet to received packets list and ack this current packet
                 # (good case - consecutive packets)
                 if self.numPacketsReceived == 0 or self.packet.packetID - 1 in self.receivedPackets:
                     self.receivedPackets.append(self.packet.packetID)
-                    self.numPacketsReceived += 1
-                    # add to the aggregate delay across all packets
-                    self.totalPacketDelay += (receivedTime - self.packet.timeSent)
-                    
                     # the packet to ack is just this current packet
                     self.currentPacketIDToAck = self.packet.packetID
 
@@ -132,10 +114,6 @@ class Destination(Device):
                 # (missing but not consecutive)
                 elif (self.packet.packetID in self.missingPackets):
                     self.receivedPackets.append(self.packet.packetID)
-                    self.numPacketsReceived += 1
-                    
-                    # add to the aggregate delay across all packets
-                    self.totalPacketDelay += (receivedTime - self.packet.timeSent)
                     
                     # this packet is no longer missing!
                     self.missingPackets.remove(self.packet.packetID)
@@ -162,10 +140,6 @@ class Destination(Device):
                         
                     # add the current packet to the rec'd list since we did receive it
                     self.receivedPackets.append(self.packet.packetID)
-                    
-                    self.numPacketsReceived += 1
-                    # add to the aggregate delay across all packets
-                    self.totalPacketDelay += (receivedTime - self.packet.timeSent)
                     
                 # send ack to currentAckPacketID packet and collect stats (happens always)
                 if not now() == 0:
