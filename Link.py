@@ -16,7 +16,7 @@ PROBE_SAMPLE_SIZE = 30
 PROBE_RATE = 15
 DEFAULT_ALPHA = 50
 NUM_PACKETS_TO_TRACK_FOR_RTT = 10
-CONGESTION_CONTROL_ALGORITHM = "AIMD"
+CONGESTION_CONTROL_ALGORITHM = "VEGAS"
 
 ####################################################################################
 # DEVICE
@@ -123,7 +123,6 @@ class Destination(Device):
                     
                 # send ack to currentAckPacketID packet and collect stats (happens always)
                 self.acknowledge()
-                print 'Received packet: ' + str(self.packet.packetID) + ' at time ' + str(receivedTime)
                                     
                 if not now() == 0:
                     # collect stats
@@ -200,7 +199,6 @@ class Link(Process):
             packet.propTime = self.propTime
             packet.device = self.end
             reactivate(packet)
-            print "t = %.2f: Job-%s departs" % (now(), str(packet.packetID))        
 
 
 ####################################################################################    
@@ -494,7 +492,7 @@ class Source(Device):
         
         # Variables for congestion control
         self.acks = {}
-        self.mostRecentAck = 0
+        self.mostRecentAck = -1
         self.fastRecovery = False
         self.rttMin = 0 # RTT for first packet
         self.rtt = 0 # Average RTT for the last "numPacketsToTrack" packets
@@ -511,11 +509,14 @@ class Source(Device):
         yield hold, self, self.startTime
         while True:       
             packetIdToRetransmit = self.getPacketIdToRetransmit()
+            
+            # First time we get 3DA
             if self.enabledCCA and not self.fastRecovery and packetIdToRetransmit!= -1:
                 # Enter Fast Recovery if necessary
                 self.fastRecovery = True
                 self.windowSize = math.ceil(self.windowSize / 2)                
             
+            # Further times we get 3DA
             if self.fastRecovery and packetIdToRetransmit != -1:
                 # For every 3 dup acks received, get the packetID for retransmit
                 self.acks[packetIdToRetransmit-1] = 0
@@ -626,9 +627,7 @@ class Source(Device):
             # Update window size
             if not self.enabledCCA:
                 self.windowSize += 1
-            elif self.congControlAlg == 'AIMD' and self.fastRecovery == False:
-                if float(math.floor(self.windowSize)) == 0:
-                    breakpoint  = 0               
+            elif self.congControlAlg == 'AIMD' and self.fastRecovery == False:            
                 self.windowSize += 1/float(math.floor(self.windowSize))
             elif self.congControlAlg == 'VEGAS' and self.fastRecovery == False:
                 packetRttTime = now() - self.timePacketWasSent[packet.packetID]
@@ -637,25 +636,27 @@ class Source(Device):
                     self.rttMin = packetRttTime
                 # Update packetRttsToTrack
                 self.packetRttsToTrack.append(packetRttTime)
-                if len(packetsRttsToTrack) > self.numPacketsToTrack:
-                    self.packetsRttsToTrack.popleft()
+                if len(self.packetRttsToTrack) > self.numPacketsToTrack:
+                    self.packetRttsToTrack.popleft()
                 self.rtt = sum(self.packetRttsToTrack) / len(self.packetRttsToTrack)
                 # Update window size accordingly
                 if (self.windowSize / self.rttMin - self.windowSize / self.rtt) < self.alpha:
                     self.windowSize += 1
                 else:
                     self.windowSize -= 1
-            # Get out fast recovery once a new ack is received
+            # Get out fast recovery once missing packet was received
             elif self.fastRecovery and self.mostRecentAck < packet.packetID:
-                self.mostRecentAck = packet.packetID
-                self.fastRecovery = False 
-                # In fast recovery, increase the window size for receiving the same ack
-            # This allow sending new packets during fast recovery
+                self.fastRecovery = False
+                #self.windowSize = math.ceil(self.windowSize / 2)
+            # Duplicate Ack
             elif self.fastRecovery and self.mostRecentAck == packet.packetID:
-                self.windowSize += 1
+                self.windowSize += 1/float(math.floor(self.windowSize))
             else:
                 print "Error: Congestion control algorithm not found."
                 assert(False)
+                
+            # Update most recent Ack
+            self.mostRecentAck = packet.packetID
             
             # Enable either AIMD or Vegas if windowSize > threshold
             if self.windowSize > THRESHOLD:
@@ -663,7 +664,6 @@ class Source(Device):
                         
             # Collecting Stats
             self.windowSizeMonitor.observe(self.windowSize)
-            print 'Ack received. ID: ' + str(packet.packetID)
             if len(self.outstandingPackets) == 0 and (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
                 global flowsDone, numFlows
                 flowsDone += 1
@@ -672,7 +672,7 @@ class Source(Device):
     def getPacketIdToRetransmit(self):
         minId = sys.maxint
         for key in self.acks.keys():
-            if key <= minId and self.acks[key] >= 3:
+            if key <= minId and self.acks[key] > 3:
                 minId = key
         if minId == sys.maxint:
             return -1
@@ -713,7 +713,6 @@ class Timer(Process):
                 if not self.source.active:
                     self.source.active = True
                     reactivate(self.source)
-                print 'Retransmitting packet ' + str(self.packet.packetID) + ' at time: ' + str(now())
         yield passivate, self
             
     # copy of packet with this id
@@ -762,7 +761,7 @@ initialize()
 #                 [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
 #                 [[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
 #                 [[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1]],
-#                 [[-1],[-1],[-1],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1]] ]
+#                 [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]] ]
 
 nodes = [[1,1,0,0,1,80000000,0,0],[1,0,1,0,1,0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[1,1,0,6,7,40000000,0,2000],[1,0,1,6,7,0,0,0],[1,1,0,8,9,40000000,0,4000],[1,0,1,8,9,0,0,0]]
 topology = [ [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
@@ -774,7 +773,7 @@ topology = [ [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
              [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
              [[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
              [[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1]],
-             [[-1],[-1],[-1],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1]] ]
+             [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]] ]
 
 # Global variables used to determine when to stop the simulation. 
 numFlows = 0
@@ -794,7 +793,7 @@ droppedPackets = []
 linkFlowRates = []
 
 # Output is written to files with names such as outputName+"throughputs(n).png"
-outputName = 'TestCase2noDynamic100'
+outputName = 'TestCase2noDynamicV100'
 
 # For each device in the nodes, instantiate the appropriate device with its monitors
 for id in range(len(nodes)):
