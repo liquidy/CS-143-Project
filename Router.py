@@ -10,14 +10,14 @@ PACKET_SIZE = 8000
 INIT_WINDOW_SIZE = 1
 THRESHOLD = 100
 ACK_TIMEOUT = 1000 # NEED TO ESTIMATE LATER
-DYNAMIC_ROUTING = False
+DYNAMIC_ROUTING = True
 PROBE_DROP_DELAY = 100
 PROBE_SAMPLE_SIZE = 50
 PROBE_RATE = 100
 DEFAULT_ALPHA = 0.0375
 NUM_PACKETS_TO_TRACK_FOR_RTT = 10
-CONGESTION_CONTROL_ALGORITHM = "VEGAS"
-TEST_CASE = 2
+CONGESTION_CONTROL_ALGORITHM = "AIMD"
+TEST_CASE = 1
 
 ####################################################################################
 # DEVICE
@@ -617,6 +617,7 @@ class Source(Device):
         self.timeout = ACK_TIMEOUT
         self.enabledCCA = False
         self.alpha = DEFAULT_ALPHA
+        self.ssthresh = THRESHOLD
         
         # Variables for congestion control
         self.dupAcks = 0
@@ -642,7 +643,8 @@ class Source(Device):
             if self.enabledCCA and not self.fastRecovery and packetIdToRetransmit!= -1:
                 # Enter Fast Recovery if necessary
                 self.fastRecovery = True
-                self.windowSize = math.ceil(self.windowSize / 2)                
+                self.ssthresh = self.windowSize / 2
+                self.windowSize = self.ssthresh + 3
                 self.dupAcks = 0
                 
                 # Create a new packet based on the packetID, and resent the packet
@@ -772,7 +774,7 @@ class Source(Device):
             # Get out fast recovery once missing packet was received
             elif self.fastRecovery and self.mostRecentAck < packet.packetID:
                 self.fastRecovery = False
-                #self.windowSize = math.ceil(self.windowSize / 2)
+                self.windowSize = self.ssthresh
             # Duplicate Ack
             elif self.fastRecovery and self.mostRecentAck == packet.packetID:
                 self.windowSize += 1/float(math.floor(self.windowSize))
@@ -820,11 +822,10 @@ class Timer(Process):
             
             # while we havent received an ack for the packet
             if self.packet.packetID in self.source.outstandingPackets:
-                global THRESHOLD
                 # When time out, update variables to slow start
                 self.source.enabledCCA = False
                 self.source.fastRecovery = False
-                THRESHOLD = THRESHOLD / 2
+                self.source.ssthresh /= 2
                 self.source.windowSize = 1
                 
                 self.source.missingAck += 1
