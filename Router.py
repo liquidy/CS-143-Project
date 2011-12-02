@@ -249,6 +249,13 @@ class Packet(Process):
                 self.device.active = True
             self.device.receivePacket(self)
 
+################################################################################
+#   RoutingTimer                                                               #
+################################################################################
+#
+#   Timer process for a Router which periodically triggers an event handler
+#   for probing link delays while not rerouting and requesting link-state
+#   data while rerouting.
 class RoutingTimer(Process):
 
     def __init__(self, router):
@@ -259,71 +266,100 @@ class RoutingTimer(Process):
     def run(self):
         while True:
             yield hold, self, self.time
-            if flowsDone == numFlows:
+            if flowsDone == numFlows: # If the simulation is over, stop
                 yield passivate, self
             self.router.timerHandler()
-            
+
+################################################################################            
+#                                   Router                                     #
+################################################################################
+#
+#   A process representing a router; child class of Device.
+#       - forwards Packet processes to the appropriate Link process based on the
+#           Packet's destination
+#       - periodically sends probe Packets along all outgoing Links to measure
+#           Packet delays
+#       - periodically sends its collected delay data to other Routers and
+#           receives delay data from those Routers, then recalculates its
+#           routing table
+#
+#   Fields:
+#       active - boolean flag which is False iff the Router process is passive
+#       buffer - the input Packet queue; unlimited capacity
+#       delayData - a list of average packet delays which is sent to other
+#           routers while rerouting; delayData[i] is the average packet delay
+#           to node i
+#       delays - a 2D array of measured packet delays on outgoing links;
+#           delays[i] is a list of measured packet delays to node i
+#       haveAck - a list of boolean flags; haveAck[i] is False iff node i must
+#           acknowledge receiving the router's delay data before it can reroute
+#       haveData - a list of boolean flags; haveData[i] is False iff the router
+#           needs delay data from node i before it can reroute
+#       linkMap - linkMap[i] is a Link to node i, or None if no such link exists
+#       links - a list of outgoing Link objects
+#       network - adjancency matrix of link data; network[i][j] is a 3-tuple
+#           (monitored?, link rate, propagation delay) if there is a link from
+#           device i to device j and [-1] otherwise
+#       networkSize - the number of devices in the network
+#       rerouting - boolean flag which is True iff the router is currently
+#           collecting data from other routers to recalculate its routing table
+#       routingTable - routingTable[i] is the Link over which to forward Packets
+#           destined for node i
+#       timer - a RoutingTimer process for the Router
+#
+#   Methods:
+#       addLink(self, link) - adds the passed Link to the list of outgoing Links
+#       dijkstra(self) - recomputes/updates the routing table and exits the
+#           rerouting state
+#       initiateReroute(self) - initializes the fields used for dynamic routing
+#           and enters the rerouting state
+#       mapLinks(self) - populates the router's Link map with its outgoing Links
+#       processMessage(self, pkt) - reads and reacts to the passed Packet's message
+#       receivePacket(self, pkt) - places the passed Packet in the input queue
+#       run(self) - main loop for routing; processes/forwards recieved Packets
+#       sendPacket(self, pkt, link) - attempts to forward the passed Packet to the
+#           passed Link
+#       timerHandler(self) - probes outgoing Links for delays if not rerouting;
+#           resends unacknowledged topology Packets if rerouting
+#       updateNetwork(self, data) - updates the stored network topology with the
+#           passed link-state data
+#
 class Router(Device):
     
-    # network - adjancency matrix of (monitored, link rate, propagation delay)
+    ##
+    # Creates a new Router process with the passed device ID and network topology.
+    # Initializes most other fields to appropriate values; the routing table and
+    # link map are populated when run() is called, and the list of outgoing Links
+    # must be filled by the caller.
+    ##
     def __init__(self, id, network):
         Device.__init__(self, id)
+        self.active = False
+        self.buffer = []
+        self.delayData = []
+        self.delays = []
+        for i in range(len(network)):
+            self.delays.append([])
+        self.haveAck = []
+        self.haveData = []
+        self.linkMap = [None] * len(network)
+        self.links = []  # to be filled by global initializer
         self.network = network
         self.networkSize = len(self.network)
-        self.buffer = []
-        self.active = False
         self.rerouting = False
-        self.links = [] # to be filled by global initializer
-        self.linkMap = [None] * self.networkSize # linkMap[i] is a link to node i
-        self.delays = [] # delays[i] is a list of measured packet delays to node i
-        for i in range(self.networkSize):
-            self.delays.append([])
-        self.delayData = [] # data sent to other routers during rerouting
-        self.haveData = [] # haveData[i] indicates whether the link state data for node i is known
-        self.haveAck = [] # haveAck[i] indicates whether a topAck has been recieved from node i
         self.routingTable = [None] * self.networkSize
         self.timer = RoutingTimer(self)
     
-    def run(self):
-        self.active = True
-        if DYNAMIC_ROUTING:
-            activate(self.timer, self.timer.run())
-        self.mapLinks()
-        self.dijkstra()
-        while True:
-            if len(self.buffer) == 0:
-                for link in self.links:
-                    link.buffMonitor.observe(len(link.queue))
-                    link.dropMonitor.observe(link.droppedPackets)
-                self.active = False
-                yield passivate, self
-                self.active = True
-            pkt = self.buffer.pop(0)
-            dest = pkt.desID
-            if dest == self.ID:
-                self.processMessage(pkt)
-            else:
-                self.sendPacket(pkt, self.routingTable[dest])
-            
-    def sendPacket(self, pkt, link):
-        if len(link.queue) < link.bufferCapacity:
-            if not link.active:
-                reactivate(link)
-                link.active = True
-            link.queue.append(pkt)
-        else:
-            link.droppedPackets += 1
-            
-    def receivePacket(self, pkt):
-            self.buffer.append(pkt)
-    
+    ##
+    # Appends the passed Link to the list of outgoing links.
+    ##
     def addLink(self, link):
         self.links.append(link)
-        
-    def mapLinks(self):
-        for link in self.links:
-            self.linkMap[link.end.ID] = link
     
+    ##
+    # Recomputes the routing table based on the stored network topology.
+    # Sets rerouting to False upon completion.
+    ##
     def dijkstra(self):
         # initialize a list of (predecessor, distance, deviceID) triples
         paths = []
@@ -335,6 +371,7 @@ class Router(Device):
         for i in range(self.networkSize):
             left.append(i)
         
+        # run Dijkstra's algorithm to find shortest paths
         while len(left) > 0:
             # find closest undiscovered node
             minDist = None
@@ -355,17 +392,74 @@ class Router(Device):
                     if dist < paths[i][1] or paths[i][1] == None: # if we found a shorter path to node i
                         paths[i] = (nextNode, dist, i)
         
+        # trace the shortest paths backwards to find correct routing table entries
         for i in range(len(paths)):
             node = paths[i]
-            # find next step toward node i from self
-            while node[0] is not self.ID:
+            while node[0] is not self.ID: 
                 node = paths[node[0]]
-            # update routing table
             self.routingTable[i] = self.linkMap[node[2]]
             
         self.rerouting = False
         
-
+    ##
+    # Sets rerouting to True.  Initializes haveData and haveAck for rerouting.
+    # Calculates delayData, resets measured delays array, updates network accordingly.
+    # Broadcasts delayData and tells other routers to begin rerouting.
+    ##
+    def initiateReroute(self):
+        self.rerouting = True
+        self.haveData = [False] * self.networkSize
+        self.haveData[self.ID] = True
+        self.haveAck = [False] * self.networkSize
+        self.haveAck[self.ID] = True
+        
+        # calculate delayData
+        self.delayData = []
+        for i in range(self.networkSize):
+            delays = self.delays[i]
+            if delays != []:
+                self.delayData.append((self.ID, i, sum(delays)/float(len(delays))))
+            self.delays[i] = []
+            
+        self.updateNetwork(self.delayData)
+        
+        # broadcast rerouting signal with new delayData
+        for i in range(self.networkSize):
+            if i is not self.ID:
+                if not (nodes[i][1] or nodes[i][2]): # if device i is a router
+                    pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, i, True, False, ("reroute", self.delayData))
+                    activate(pkt, pkt.run())
+                    self.sendPacket(pkt, self.routingTable[i])
+                else: # device is not a router, so don't need to communicate with it
+                    self.haveData[i] = True
+                    self.haveAck[i] = True
+                
+    ##
+    # Populates linkMap with the outgoing Links.
+    ##
+    def mapLinks(self):
+        for link in self.links:
+            self.linkMap[link.end.ID] = link
+    
+    ##
+    # Reads the passed Packet's message (type, data) and acts based upon type:
+    #   type "probe" - if not rerouting, calculate the delay experienced by the
+    #       probe and send this data back to the Packet's source as a probeAck
+    #   type "probeAck" - if not rerouting, add data to the array of measured
+    #       packet delays
+    #   type "reroute" - if not already rerouting, begin rerouting; then process
+    #       this Packet as if it had type "topology"
+    #   type "topology" - acknowledge receipt of the source's delayData; then if
+    #       currently rerouting use data to update the stored network topology,
+    #       and if this router has received current delayData from all other
+    #       routers and all other routers have acknowledged receipt of this
+    #       router's delayData, recompute the routing table and stop rerouting
+    #   type "topAck" - if currently rerouting use data to update the stored
+    #       network topology, and if this router has received current delayData
+    #       from all other routers and all other routers have acknowledged
+    #       receipt of this router's delayData, recompute the routing table and
+    #       stop rerouting
+    ##
     def processMessage(self, pkt):
         source = pkt.sourceID
         (type, data) = pkt.myMessage
@@ -418,52 +512,85 @@ class Router(Device):
             if self.haveData == [True] * self.networkSize and self.haveAck == [True] * self.networkSize:
                 self.dijkstra()
     
-    def initiateReroute(self):
-        self.rerouting = True
-        self.haveData = [False] * self.networkSize
-        self.haveData[self.ID] = True
-        self.haveAck = [False] * self.networkSize
-        self.haveAck[self.ID] = True
-        self.delayData = []
-        for i in range(self.networkSize):
-            delays = self.delays[i]
-            if delays != []:
-                self.delayData.append((self.ID, i, sum(delays)/float(len(delays))))
-            self.delays[i] = []
-        self.updateNetwork(self.delayData)
-        for i in range(self.networkSize):
-            if i is not self.ID:
-                if not (nodes[i][1] or nodes[i][2]):
-                    pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, i, True, False, ("reroute", self.delayData))
-                    activate(pkt, pkt.run())
-                    self.sendPacket(pkt, self.routingTable[i])
-                else:
-                    self.haveData[i] = True
-                    self.haveAck[i] = True
+    ##
+    # Places the passed Packet in the router's input queue.
+    ##
+    def receivePacket(self, pkt):
+            self.buffer.append(pkt)
+    
+    ##
+    # Main loop for Router process.  Initializes linkMap and routingTable before
+    # entering the loop.  Loops popping received packets and either forwarding
+    # them to their destination, or if they are for this router reading and
+    # reacting to their message.  Passivates when the input queue is empty.
+    ##
+    def run(self):
+        self.active = True
+        if DYNAMIC_ROUTING:
+            activate(self.timer, self.timer.run())
+        self.mapLinks()
+        self.dijkstra()
+        
+        while True:
+            if len(self.buffer) == 0:
+                for link in self.links:
+                    link.buffMonitor.observe(len(link.queue))
+                    link.dropMonitor.observe(link.droppedPackets)   
+                self.active = False
+                yield passivate, self
+                self.active = True
                 
-    def updateNetwork(self, data):
-        for datum in data:
-            (start, end, delay) = datum
-            self.network[start][end][2] = delay
-                
+            pkt = self.buffer.pop(0)
+            dest = pkt.desID
+            if dest == self.ID:
+                self.processMessage(pkt)
+            else:
+                self.sendPacket(pkt, self.routingTable[dest])
+            
+    ##
+    # Enqueues the passed Packet at the passed Link if the Link is not full;
+    # drops the Packet otherwise.  If the Link was inactive, reactivates it.
+    ##
+    def sendPacket(self, pkt, link):
+        if len(link.queue) < link.bufferCapacity:
+            if not link.active:
+                reactivate(link)
+                link.active = True
+            link.queue.append(pkt)
+        else:
+            link.droppedPackets += 1
+            
+    ##
+    # Called periodically by a RoutingTimer process if DYNAMIC_ROUTING is True.
+    # If not rerouting, sends a delay probe Packet across all outgoing Links.
+    # If rerouting, sends delayData to others routers which have not acknowledged
+    # this router's delayData.
+    ##
     def timerHandler(self):
         if not self.rerouting:
-            # send probes
             for link in self.links:
                 dst = link.end.ID
-                if len(link.queue) >= link.bufferCapacity:
+                if len(link.queue) >= link.bufferCapacity: # if the probe will be dropped
                     self.delays[dst].append(PROBE_DROP_DELAY)
                 pkt = Packet("Probe %d %d" % (self.ID, dst), now(), self.ID, dst, True, False, ("probe", None))
                 activate(pkt, pkt.run())
                 self.sendPacket(pkt, link)
         else:
-            # resent unacknowledged data
             for i in range(self.networkSize):
                 if not self.haveAck[i]:
                     pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, i, True, False, ("topology", self.delayData))
                     activate(pkt, pkt.run())
                     self.sendPacket(pkt, self.routingTable[i])
     
+    ##
+    # Updates the stored network topology with the passed link delay data.
+    # data is a list of 3-tuples (start, end, delay) of link states.
+    ##
+    def updateNetwork(self, data):
+        for datum in data:
+            (start, end, delay) = datum
+            self.network[start][end][2] = delay
+                    
 
 # Source
 class Source(Device):
