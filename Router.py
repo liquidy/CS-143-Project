@@ -10,13 +10,14 @@ PACKET_SIZE = 8000
 INIT_WINDOW_SIZE = 1
 THRESHOLD = 100
 ACK_TIMEOUT = 1000 # NEED TO ESTIMATE LATER
-DYNAMIC_ROUTING = True
+DYNAMIC_ROUTING = False
 PROBE_DROP_DELAY = 100
 PROBE_SAMPLE_SIZE = 50
 PROBE_RATE = 100
 DEFAULT_ALPHA = 0.0375
 NUM_PACKETS_TO_TRACK_FOR_RTT = 10
-CONGESTION_CONTROL_ALGORITHM = "AIMD"
+CONGESTION_CONTROL_ALGORITHM = "VEGAS"
+TEST_CASE = 2
 
 ####################################################################################
 # DEVICE
@@ -642,12 +643,7 @@ class Source(Device):
                 # Enter Fast Recovery if necessary
                 self.fastRecovery = True
                 self.windowSize = math.ceil(self.windowSize / 2)                
-            
-            # Further times we get 3DA
-            if self.fastRecovery and packetIdToRetransmit != -1:
-                # For every 3 dup acks received, get the packetID for retransmit
                 self.dupAcks = 0
-                assert(packetIdToRetransmit != -1)
                 
                 # Create a new packet based on the packetID, and resent the packet
                 message = "Packet " + str(packetIdToRetransmit) + "'s data goes here!"
@@ -888,13 +884,27 @@ initialize()
 #                 [[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1]],
 #                 [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]] ]
 
-nodes = [[1, 1, 0, 0, 1, 160000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
-topology = [ [[-1],[-1],[0,10000,10,64],[-1],[-1],[-1]], 
+if TEST_CASE == 1:
+    nodes = [[1, 1, 0, 0, 1, 160000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
+    topology = [ [[-1],[-1],[0,10000,10,64],[-1],[-1],[-1]], 
              [[-1],[-1],[-1],[-1],[-1],[0,10000,10,64]], 
              [[0, 10000, 10, 64],[-1],[-1],[1, 10000, 10, 64],[1, 10000, 10, 64],[-1]],
              [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
              [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
              [[-1],[0, 10000, 10, 64],[-1],[0, 10000, 10, 64],[0, 10000, 10, 64],[-1]] ]
+elif TEST_CASE == 2:
+    nodes = [[1,1,0,0,1,80000000,0,0],[1,0,1,0,1,0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[1,1,0,6,7,40000000,0,2000],[1,0,1,6,7,0,0,0],[1,1,0,8,9,40000000,0,4000],[1,0,1,8,9,0,0,0]]
+    topology = [ [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+                 [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]],
+                 [[0,10000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1]],
+                 [[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1],[-1]],
+                 [[-1],[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1]],
+                 [[-1],[0,10000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1],[0,10000,10,128]],
+                 [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+                 [[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
+                 [[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1]],
+                 [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]] ]
+
 
 # Global variables used to determine when to stop the simulation. 
 numFlows = 0
@@ -914,7 +924,10 @@ droppedPackets = []
 linkFlowRates = []
 
 # Output is written to files with names such as outputName+"throughputs(n).png"
-outputName = 'TestCase1Dynamic' + CONGESTION_CONTROL_ALGORITHM
+outputName = 'TestCase' + str(TEST_CASE)
+if DYNAMIC_ROUTING:
+    outputName += 'Dynamic'
+outputName += CONGESTION_CONTROL_ALGORITHM
 
 # For each device in the nodes, instantiate the appropriate device with its monitors
 for id in range(len(nodes)):
