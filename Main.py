@@ -621,6 +621,7 @@ class Source(Device):
         self.windowSizeMonitor = windowSizeMonitor
         self.startTime = startTime
         
+        # Set some additional variables
         self.roundTripTime = 0
         self.currentPacketID = 0
         self.outstandingPackets = {}
@@ -630,9 +631,7 @@ class Source(Device):
         self.numMissingAcks = 5
         self.missingAck = 0
         self.numPacketsSent = 0
-        
-        # False if in slow start, True otherwise
-        self.enabledCCA = False
+        self.enabledCCA = False          # False if in slow start, True otherwise
         
         # Variables for congestion control
         self.dupAcks = 0
@@ -783,69 +782,104 @@ class Source(Device):
         if (PACKET_SIZE * self.numPacketsSent < self.bitsToSend):
             self.numPacketsSent += 1
             
+            # since we are just sending this packet it will be outstanding since
+            # we havent received an ack for it yet
             self.outstandingPackets[packet.packetID] = True
+            
+            # update the map of packets to times sent
             self.timePacketWasSent[packet.packetID] = now()
+            
+            # make sure the link is active
             if self.link.active is False:
                 reactivate(self.link)
                 self.link.active = True
             self.link.queue.append(packet)
+            
             # create the timer for this packet
             t = Timer(packet, self.timeout, self)
             activate(t, t.run())
     
+    #
+    # The given packet was dropped, so resend the input packet.
+    #
     def sendPacketAgain(self, packet):
+        # update the map of packets to times sent
         self.timePacketWasSent[packet.packetID] = now()
+        
+        # make sure link is active
         if self.link.active is False:
             reactivate(self.link)
             self.link.active = True
         self.link.queue.append(packet)
         
+    #
+    # This method is called whenever a packet needs to be received by Source.
+    #
     def receivePacket(self, packet):
+        # Do stuff if the packet is an ack, ignore if a router msg
         if packet.isAck:
-            # Count Acks
+            # Count acks
             if packet.packetID > self.mostRecentAck:
                 self.dupAcks = 0
             elif packet.packetID == self.mostRecentAck:
                 self.dupAcks += 1
             
-            # Remove the outstanding packets from the list
+            # Remove this packet from the list of outstanding packets if we receive a packet that
+            # was in that table
             if packet.packetID in self.outstandingPackets:
                 print "Ack " + str(packet.packetID)
+                
+                # if we receive a packet that was previously outstanding, then assume that we have 
+                # received all packets up to that packet, so delete all the previous possible 
+                # outstanding packets from the table
                 for key in self.outstandingPackets.keys():
                     if key <= packet.packetID:
                         del self.outstandingPackets[key]
                         
-            # Update window size
+            # Update window size in the appropriate manner
             if not self.enabledCCA:
                 self.windowSize += 1
+                
             elif self.congControlAlg == 'AIMD' and self.fastRecovery == False:            
                 self.windowSize += 1/float(math.floor(self.windowSize))
+                
             elif self.congControlAlg == 'VEGAS' and self.fastRecovery == False:
+                # Calculate RTT
                 packetRttTime = now() - self.timePacketWasSent[packet.packetID]
+                
                 # Set rttMin if has not been set yet
                 if self.rttMin == 0:
                     self.rttMin = packetRttTime
+                
                 # Update packetRttsToTrack
                 self.packetRttsToTrack.append(packetRttTime)
+                
+                # Make sure we only keep the specified number of RTT times in the packetRttsToTrack 
+                # list since we will use that many values to calculate the avg RTT
                 if len(self.packetRttsToTrack) > self.numPacketsToTrack:
                     self.packetRttsToTrack.popleft()
+                # calculate the avg RTT
                 self.rtt = sum(self.packetRttsToTrack) / len(self.packetRttsToTrack)
-                # Update window size accordingly
+                
+                # Update window size accordingly once we know RTT
                 if (self.windowSize / self.rttMin - self.windowSize / self.rtt) < self.alpha:
                     self.windowSize += 1
                 else:
                     self.windowSize -= 1
-            # Get out fast recovery once missing packet was received
+                    
+            # Get out of fast recovery once missing packet was received
             elif self.fastRecovery and self.mostRecentAck < packet.packetID:
                 self.fastRecovery = False
                 self.windowSize = self.ssthresh
-            # Duplicate Ack
+                
+            # Duplicate ack
             elif self.fastRecovery and self.mostRecentAck == packet.packetID:
                 self.windowSize += 1/float(math.floor(self.windowSize))
+            
             else:
                 pass
                 
-            # Update most recent Ack
+            # Update most recent ack
             if self.mostRecentAck < packet.packetID:
                 self.mostRecentAck = packet.packetID
             
@@ -853,10 +887,10 @@ class Source(Device):
             if self.windowSize > self.ssthresh:
                 self.enabledCCA = True
                         
-            # Collecting Stats
+            # Collect Stats
             self.windowSizeMonitor.observe(self.windowSize)
             if len(self.outstandingPackets) == 0 and (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
-                global flowsDone, numFlows
+                global flowsDone
                 flowsDone += 1
  
  
@@ -864,25 +898,28 @@ class Source(Device):
 #                                   TIMER                                     #
 ################################################################################
 
-# Timer
-# this is called every time a packet is sent. it waits the timeout
-# set by the source, then resends packet while it is in list of outst
-# packets. once it is no longer in that list, just passivate
+# Called every time a packet is sent. Waits the timeout time set by the Source, 
+# then resends the packet while it is in list of outstanding packets. 
+# Once it is no longer in that list, just passivate.
 class Timer(Process):
-    # packet is the packet for which this timer is associated with
-    # time is the length of time before timer times out
-    # source is the object which sends the packets
+
     def __init__(self, packet, time, source):
         Process.__init__(self, name="Timer" + str(packet.packetID))
-        self.packet = packet
-        self.time = time
-        self.source = source
+        self.packet = packet    # packet for which this timer is associated with
+        self.time = time        # length of time before timer times out
+        self.source = source    # the object which sends the packets
     
+    #
+    # Called when Timer is activated.
+    #
     def run(self):
+        # While we have outstanding packets
         while self.packet.packetID in self.source.outstandingPackets:
+            # wait for the specified time
             yield hold, self, self.time
+            # timeout happens at this point
             
-            # while we havent received an ack for the packet
+            # While we havent received an ack for the packet
             if self.packet.packetID in self.source.outstandingPackets:
                 # When time out, update variables to slow start
                 self.source.enabledCCA = False
@@ -892,18 +929,20 @@ class Timer(Process):
                 
                 self.source.missingAck += 1
                     
-                # Add packet to source's queue for retransmit the timeout packet
+                # Add packet to source's queue to retransmit the timeout packet
                 self.source.toRetransmit.append(self.createPacket(self.packet))
                 
+                # make sure Source is active
                 if not self.source.active:
                     self.source.active = True
                     reactivate(self.source)
         yield passivate, self
-            
-    # copy of packet with this id
+      
+    #
+    # Create a copy of packet with this id.
+    #
     def createPacket(self, packet):
         message = "Packet " + str(packet.packetID) + "'s data goes here!"
-        # packetId, timesent, sourceID, destid, isroutermsg, isack, msg
         newPacket = Packet(packet.packetID, now(), packet.sourceID,
                            packet.desID, packet.isRouterMesg, packet.isAck, message)
         activate(newPacket, newPacket.run())
