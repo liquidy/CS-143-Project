@@ -7,15 +7,16 @@ import sys
 
 PACKET_SIZE = 8000
 INIT_WINDOW_SIZE = 1
-THRESHOLD = 1
+THRESHOLD = 80
 ACK_TIMEOUT = 1000 # NEED TO ESTIMATE LATER
 DYNAMIC_ROUTING = False
 PROBE_DROP_DELAY = 100
 PROBE_SAMPLE_SIZE = 50
 PROBE_RATE = 100
-DEFAULT_ALPHA = .8
+DEFAULT_ALPHA = .6
 NUM_PACKETS_TO_TRACK_FOR_RTT = 10
-CONGESTION_CONTROL_ALGORITHM = "VEGAS"
+THROUGHPUT_AVERAGE = 20
+CONGESTION_CONTROL_ALGORITHM = "AIMD"
 TEST_CASE = 2
 
 #############################################################################            
@@ -108,7 +109,7 @@ class Destination(Device):
                     self.missingPackets.remove(self.packet.packetID)
                 
                 # Non consecutive packets must be added to missing
-                for i in range(self.highestReceivedPacket+1, self.packet.packetID):
+                for i in range(self.highestReceivedPacket + 1, self.packet.packetID):
                     self.missingPackets.append(i)
                 
                 # Update the highest packets received    
