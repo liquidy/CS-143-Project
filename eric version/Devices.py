@@ -5,7 +5,6 @@ import math
 from Link import *
 from Packet import *
 from Timers import *
-from RoutingTimer import *
 from Global import *
 
 ####################################################################################
@@ -355,7 +354,7 @@ class Source(Device):
             self.link.queue.append(packet)
             
             # create the timer for this packet
-            t = Timer(packet, self.timeout, self)
+            t = SourceTimer(packet, self.timeout, self)
             activate(t, t.run())
     
     #
