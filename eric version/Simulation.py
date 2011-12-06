@@ -172,7 +172,7 @@ class Simulation():
         # Window Sizes    
         n = 0
         for m in windowSizes:
-            plt.plot(m.tseries(), m.yseries(),'o')
+            plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
             plt.xlabel("Time")
             plt.ylabel("Packets")
@@ -183,7 +183,11 @@ class Simulation():
         # Throughputs
         n = 0
         for m in throughputs:
-            plt.plot(m.tseries(), m.yseries(),'o')
+            L = len(m.yseries())
+            deltay = [a-b for a,b in zip(m.yseries()[2*THROUGHPUT_AVERAGE:L],m.yseries()[0:L-2*THROUGHPUT_AVERAGE])]
+            deltax = [a-b for a,b in zip(m.tseries()[2*THROUGHPUT_AVERAGE:L],m.tseries()[0:L-2*THROUGHPUT_AVERAGE])]
+            thru = [float(a)/b for a,b in zip(deltay,deltax)]
+            plt.plot(m.tseries()[THROUGHPUT_AVERAGE:L-THROUGHPUT_AVERAGE], thru)
             plt.title(m.name)
             plt.xlabel("Time")
             plt.ylabel("Bits per Second")
@@ -194,7 +198,7 @@ class Simulation():
         # Send Rates    
         n = 0
         for m in sendRates:
-            plt.plot(m.tseries(), m.yseries(),'o')
+            plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
             plt.xlabel("Time")
             plt.ylabel("Bits per Second")
@@ -205,7 +209,7 @@ class Simulation():
         # Packet Delays
         n = 0
         for m in packetDelays:
-            plt.plot(m.tseries(), m.yseries(),'o')
+            plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
             plt.xlabel("Time")
             plt.ylabel("Time")
@@ -216,7 +220,7 @@ class Simulation():
         # Buffer Occupancies    
         n = 0
         for m in bufferOccs:
-            plt.plot(m.tseries(), m.yseries(),'o')
+            plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
             plt.xlabel("Time")
             plt.ylabel("Packets")
@@ -227,7 +231,7 @@ class Simulation():
         # Dropped Packets    
         n = 0
         for m in droppedPackets:
-            plt.plot(m.tseries(), m.yseries(),'o')
+            plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
             plt.xlabel("Time")
             plt.ylabel("Packets")
