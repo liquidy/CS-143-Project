@@ -238,14 +238,13 @@ class Packet(Process):
         self.propTime = None
         self.device = None
         
-    # to activate the process, call activate(p1, p1.run())
-    # I understand why link should be active-passivate-active...
-    # but I think packet could always stay active, I don't think I see
-    # why we need to make it passivate and wake up again.
     def run(self):
         while True:
             yield passivate, self
+            # When link starts transmitting, it activates packet.
+            # Packet holds for the propTime
             yield hold, self, self.propTime
+            # It then euqueues into device's queue
             if not self.device.active:
                 reactivate(self.device)
                 self.device.active = True
