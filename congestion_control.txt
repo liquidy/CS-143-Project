@@ -1,0 +1,47 @@
+The difference between fast retransmit/ recovery is: window size stay static
+in fast retransmit, while w = w + 1 for each dup ack is received. So fast
+recovery is better. 
+
+Global variable: 
+threshold = 50 or etc
+timeout: length of the timer of each packet 
+         scale in seconds(5-10 s), while RTT scale in ms
+
+SS
+1. w = 1
+2. w = w + 1 upon receiving one ack
+3. if (w > threshold and not yet time out): enter AIMD or FAST
+    Note: time out is the only way to get out of AIMD or FAST, 
+4. if (time out): set threshold = threshold / 2
+                  retransmit the time out packet 
+                  go back to 1.
+
+AIMD
+1. w = w + 1/w for every ack
+2.1 if received 3 dup acks: enter fast retransmit/fast recovery
+Fast Retransmit:
+    i) w = w / 2
+    ii) for every 3 dup acks received, resend the lost packet(no matter the window size)
+    iii) if window size is allowed, we can send new packet
+    iv) once new ack is received, go back to AIMD.1
+Fast Recovery:
+    i) w = w / 2 (only happen once at the beginning)
+    ii) for every 3 dup acks received, resend the lost packet(no matter the window size)
+    *iii)* for each additional acks after the 3rd dup ack, w = w + 1
+    iv) if window size is allowed, we can send new packet
+    v) once new ack is received, set w = w / 2 and go back to AIMD.1
+2.2 if time out happen at any of this, go back to SS.1
+
+TCP Vegas
+Exactly the same as AIMD except for step 1.
+1. For every RTT:
+    if W/RTTmin - W/RTT  < alpha then W++
+    if W/RTTmin - W/RTT  > alpha then W--
+
+FAST TCP
+Exactly the same as AIMD except for step 2
+1. periodically:
+    W = (baseRTT/RTT) * W + alpha
+    
+I'm not very sure about FAST TCP, and TCP vegas makes more sense to me. Either one
+will work.
