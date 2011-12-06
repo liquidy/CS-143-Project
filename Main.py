@@ -135,7 +135,7 @@ class Destination(Device):
     def receivePacket(self, packet):
         self.packet = packet
     
-    # sends ack once it receives packet
+    # Sends ack once it receives packet
     def acknowledge(self):
         if not self.link.active:
             reactivate(self.link)
@@ -152,6 +152,7 @@ class Destination(Device):
         activate(newPacket, newPacket.run())
         return newPacket    
 
+
 ####################################################################################    
 # LINK
 ####################################################################################
@@ -164,7 +165,7 @@ class Link(Process):
 
     def __init__(self, linkRate, start, end, propTime, bufferCapacity, buffMonitor, dropMonitor, flowMonitor):
         Process.__init__(self)
-        self.queue = []
+        self.queue = []             
         self.linkRate = linkRate
         self.start = start
         self.end = end
@@ -250,6 +251,7 @@ class Packet(Process):
                 self.device.active = True
             self.device.receivePacket(self)
 
+
 ################################################################################
 #   RoutingTimer                                                               #
 ################################################################################
@@ -267,9 +269,10 @@ class RoutingTimer(Process):
     def run(self):
         while True:
             yield hold, self, self.time
-            if flowsDone == numFlows: # If the simulation is over, stop
+            if flowsDone == numFlows:    # If the simulation is over, stop
                 yield passivate, self
             self.router.timerHandler()
+
 
 ################################################################################            
 #                                   Router                                     #
@@ -593,42 +596,54 @@ class Router(Device):
             self.network[start][end][2] = delay
                     
 
-# Source
+################################################################################            
+#                                   SOURCE                                     #
+################################################################################
+
 class Source(Device):
 
     def __init__(self, ID, destinationID, bitsToSend, congControlAlg, startTime, sendRateMonitor, windowSizeMonitor):
+        # Call Device superclass
         Device.__init__(self, ID)
+        
+        # Constants set at the top
+        self.alpha = DEFAULT_ALPHA
+        self.ssthresh = THRESHOLD
+        self.windowSize = INIT_WINDOW_SIZE
+        self.congControlAlg = CONGESTION_CONTROL_ALGORITHM
+        self.timeout = ACK_TIMEOUT
+        
+        # Store the constructor inputs
         self.destinationID = destinationID
         self.bitsToSend = bitsToSend
-        self.congControlAlg = CONGESTION_CONTROL_ALGORITHM
+        self.sendRateMonitor = sendRateMonitor
+        self.windowSizeMonitor = windowSizeMonitor
+        self.startTime = startTime
+        
         self.roundTripTime = 0
-        self.windowSize = INIT_WINDOW_SIZE
         self.currentPacketID = 0
         self.outstandingPackets = {}
         self.toRetransmit = []
         self.link = None
         self.active = False
-        self.sendRateMonitor = sendRateMonitor
-        self.windowSizeMonitor = windowSizeMonitor
-        self.startTime = startTime
         self.numMissingAcks = 5
         self.missingAck = 0
         self.numPacketsSent = 0
-        self.timeout = ACK_TIMEOUT
+        
+        # False if in slow start, True otherwise
         self.enabledCCA = False
-        self.alpha = DEFAULT_ALPHA
-        self.ssthresh = THRESHOLD
         
         # Variables for congestion control
         self.dupAcks = 0
         self.mostRecentAck = -1
         self.fastRecovery = False
-        self.rttMin = 0 # RTT for first packet
-        self.rtt = 0 # Average RTT for the last "numPacketsToTrack" packets
-        self.packetRttsToTrack = deque() # Queue tracking the last "numPacketsToTrack" packet RTTs
+        self.rttMin = 0                   # RTT for first packet
+        self.rtt = 0                      # Average RTT for the last "numPacketsToTrack" packets
+        self.packetRttsToTrack = deque()  # Queue tracking the last "numPacketsToTrack" packet RTTs
         self.numPacketsToTrack = NUM_PACKETS_TO_TRACK_FOR_RTT  # Number of packets to track in packetRttsToTrack
-        self.timePacketWasSent = {} # Dict that records the time that a packet was set
+        self.timePacketWasSent = {}                            # Dict that records the time that a packet was set
 
+    
     def addLink(self, link):
         self.link = link
     
