@@ -37,6 +37,8 @@ Configure the simulator by editing the default values for the fields in Global:
     NUM_PACKETS_TO_TRACK_FOR_RTT: number of packets whose RTT is averaged to
                                   determined how to adjust the window size in TCP VEGAS
     
+    THROUGHPUT_AVERAGE: 
+
     CONGESTION_CONTROL_ALGORITHM: "AIMD" or "VEGAS"
 
     TEST_CASE: 1 or 2 for the required test cases, or a tuple to be interpreted
