@@ -6,7 +6,6 @@ import math
 import sys
 
 PACKET_SIZE = 8000
-#INIT_WINDOW_SIZE = 1000
 INIT_WINDOW_SIZE = 1
 THRESHOLD = 1
 ACK_TIMEOUT = 1000 # NEED TO ESTIMATE LATER
@@ -184,6 +183,7 @@ class Link(Process):
     def run(self):
         self.active = True
         while True:
+            # link goes to sleep if there's no more stuff to transmit
             if self.queue == []:
                 self.active = False
                 yield passivate, self
@@ -193,6 +193,7 @@ class Link(Process):
             packet = self.queue.pop(0)
             # wait for trans time
             yield hold, self, packet.size / float(self.linkRate)
+            # update stats
             self.packetsSent += 1
             if not now() == 0:
                 self.flowMonitor.observe(packet.size * self.packetsSent / float(now()))
