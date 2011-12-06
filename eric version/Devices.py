@@ -66,11 +66,15 @@ class Destination(Device):
         self.currentPacketIDToAck = -1   # keeps track of the next packet ID to acknowledge
         self.highestReceivedPacket = -1
 
+    # 
     # Attach a Link to this Destination.
+    #
     def addLink(self, link):
         self.link = link
         
+    # 
     # Process packets as they arrive
+    #
     def run(self):
         self.active = True
         while True:
