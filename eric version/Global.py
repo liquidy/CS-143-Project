@@ -14,6 +14,7 @@ class Global():
 
         self.DEFAULT_ALPHA = .6
         self.NUM_PACKETS_TO_TRACK_FOR_RTT = 10
+        self.THROUGHPUT_AVERAGE = 20
         self.CONGESTION_CONTROL_ALGORITHM = "VEGAS"
 
         self.TEST_CASE = 2
