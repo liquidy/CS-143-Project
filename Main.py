@@ -161,12 +161,14 @@ class Destination(Device):
 #############################################################################
 
 #
-# Link class - extends Process. Links connect Sources, Routers, and Destinations, and
-# transmit Packets.
+# Link class - extends Process. Links connect Sources, Routers,
+# and Destinations, and transmit Packets.
 #
 class Link(Process):
 
-    def __init__(self, linkRate, start, end, propTime, bufferCapacity, buffMonitor, dropMonitor, flowMonitor):
+    def __init__(self, linkRate, start, end, propTime, bufferCapacity,
+                 buffMonitor, dropMonitor, flowMonitor):
+        
         Process.__init__(self)
         self.queue = []             
         self.linkRate = linkRate
@@ -213,10 +215,13 @@ class Link(Process):
 
 #packet:
 #- packet is a process
-#- source creates packet object (at first packet is not activated), enqueues it in the #link
-#- link then tells it where it is going (in terms of next device) and tells it how long #to wait, and then activates the packet
+#- source creates packet object (at first packet is not activated), enqueues
+#      it in the #link
+#- link then tells it where it is going (in terms of next device) and tells 
+#      it how long #to wait, and then activates the packet
 #- packet waits for the needed time
-#- once it has waited for that time it enqueues itself in that appropriate device #(router) and goes to sleep
+#- once it has waited for that time it enqueues itself in that appropriate 
+#      device #(router) and goes to sleep
 #- packet needs public router object
 #- when packet wakes up, it is because a link has reactivated it
 
@@ -229,7 +234,9 @@ class Link(Process):
 class Packet(Process):
     # To create a Packet(process), use p1 = Packet(1, 20, 1)
     # to create a packet with ID = 1, size = 20, timeSent = 1
-    def __init__(self, packetID, timeSent, sourceID, desID, isRouterMesg, isAck, myMessage):
+    def __init__(self, packetID, timeSent, sourceID, desID, isRouterMesg, 
+                 isAck, myMessage):
+        
         Process.__init__(self, name="Packet" + str(packetID))
         self.packetID= packetID
         self.size = PACKET_SIZE
@@ -585,15 +592,20 @@ class Router(Device):
         if not self.rerouting:
             for link in self.links:
                 dst = link.end.ID
-                if len(link.queue) >= link.bufferCapacity: # if the probe will be dropped
+                # if the probe will be dropped
+                if len(link.queue) >= link.bufferCapacity:
                     self.delays[dst].append(PROBE_DROP_DELAY)
-                pkt = Packet("Probe %d %d" % (self.ID, dst), now(), self.ID, dst, True, False, ("probe", None))
+                pkt = Packet("Probe %d %d" % (self.ID, dst),
+                             now(), self.ID, dst, True, False,
+                             ("probe", None))
                 activate(pkt, pkt.run())
                 self.sendPacket(pkt, link)
         else:
             for i in range(self.networkSize):
                 if not self.haveAck[i]:
-                    pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, i, True, False, ("topology", self.delayData))
+                    pkt = Packet("Delay Data at %d" % (self.ID),
+                                 now(), self.ID, i, True, False,
+                                 ("topology", self.delayData))
                     activate(pkt, pkt.run())
                     self.sendPacket(pkt, self.routingTable[i])
     
@@ -614,7 +626,9 @@ class Router(Device):
 # Sends packets and receives acks.
 class Source(Device):
 
-    def __init__(self, ID, destinationID, bitsToSend, congControlAlg, startTime, sendRateMonitor, windowSizeMonitor):
+    def __init__(self, ID, destinationID, bitsToSend, congControlAlg, 
+                 startTime, sendRateMonitor, windowSizeMonitor):
+        
         # Call Device superclass
         Device.__init__(self, ID)
         
@@ -651,8 +665,8 @@ class Source(Device):
         self.rttMin = 0                   # Minimum recorded RTT (constantly updated)
         self.rtt = 0                      # Average RTT for the last "numPacketsToTrack" packets
         self.packetRttsToTrack = deque()  # Queue tracking the last "numPacketsToTrack" packet RTTs
-        self.numPacketsToTrack = NUM_PACKETS_TO_TRACK_FOR_RTT  # Number of packets to track in packetRttsToTrack
-        self.timePacketWasSent = {}                            # Dict that records the time that a packet was set
+        self.numPacketsToTrack = NUM_PACKETS_TO_TRACK_FOR_RTT  # Number of packets to track for RTT
+        self.timePacketWasSent = {}       # Dict that records the time that a packet was set
 
     # 
     # Attach a Link to the Source.
@@ -717,7 +731,8 @@ class Source(Device):
                     if not now() == 0:
                         self.link.buffMonitor.observe(len(self.link.queue))
                         self.link.dropMonitor.observe(self.link.droppedPackets)
-                        self.sendRateMonitor.observe(PACKET_SIZE*self.numPacketsSent / float(now()))
+                        self.sendRateMonitor.observe(
+                                PACKET_SIZE*self.numPacketsSent / float(now()))
                 
             # if everything has been sent, go to sleep
             elif PACKET_SIZE * self.numPacketsSent >= self.bitsToSend:
@@ -983,16 +998,30 @@ initialize()
 #
 # Common test cases are the following:
 # Test Case 1:
-#    nodes = [[1, 1, 0, 0, 1, 160000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]
-#    topology = [ [[-1], [-1], [0, 10000, 10, 64], [-1], [-1], [-1]], 
-#                 [[-1], [-1], [-1], [-1], [-1], [0, 10000, 10, 64]], 
-#                 [[0, 10000, 10, 64], [-1], [-1], [1, 10000, 10, 64], [1, 10000, 10, 64], [-1]], 
-#                 [[-1], [-1], [1, 10000, 10, 64], [-1], [-1], [0, 10000, 10, 64]], 
-#                 [[-1], [-1], [1, 10000, 10, 64], [-1], [-1], [0, 10000, 10, 64]], 
-#                 [[-1], [0, 10000, 10, 64], [-1], [0, 10000, 10, 64], [0, 10000, 10, 64], [-1]] ]
+#    nodes = [[1, 1, 0, 0, 1, 160000000, 0, 0],
+#             [1, 0, 1, 0, 1, 0, 0, 0],
+#             [0, 0, 0],
+#             [0, 0, 0],
+#             [0, 0, 0],
+#             [0, 0, 0]]
+#    topology = [ [[-1], [-1], [0, 15000, 10, 64], [-1], [-1], [-1]], 
+#             [[-1], [-1], [-1], [-1], [-1], [0, 10000, 10, 64]], 
+#             [[0, 15000, 10, 64], [-1], [-1], [1, 10000, 10, 64], [1, 10000, 10, 64], [-1]], 
+#             [[-1], [-1], [1, 10000, 10, 64], [-1], [-1], [0, 10000, 10, 64]], 
+#             [[-1], [-1], [1, 10000, 10, 64], [-1], [-1], [0, 10000, 10, 64]], 
+#             [[-1], [0, 10000, 10, 64], [-1], [0, 10000, 10, 64], [0, 10000, 10, 64], [-1]] ]
 #
 # Test Case 2:
-#    nodes = [[1, 1, 0, 0, 1, 80000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [1, 1, 0, 6, 7, 40000000, 0, 2000], [1, 0, 1, 6, 7, 0, 0, 0], [1, 1, 0, 8, 9, 40000000, 0, 4000], [1, 0, 1, 8, 9, 0, 0, 0]]
+#    nodes = [[1, 1, 0, 0, 1, 80000000, 0, 0], 
+#             [1, 0, 1, 0, 1, 0, 0, 0], 
+#             [0, 0, 0],
+#             [0, 0, 0],
+#             [0, 0, 0],
+#             [0, 0, 0],
+#             [1, 1, 0, 6, 7, 40000000, 0, 2000], 
+#             [1, 0, 1, 6, 7, 0, 0, 0],
+#             [1, 1, 0, 8, 9, 40000000, 0, 4000],
+#             [1, 0, 1, 8, 9, 0, 0, 0]]
 #    topology = [ [[-1], [-1], [0, 10000, 10, 128], [-1], [-1], [-1], [-1], [-1], [-1], [-1]], 
 #                 [[-1], [-1], [-1], [-1], [-1], [0, 10000, 10, 128], [-1], [-1], [-1], [-1]], 
 #                 [[0, 10000, 10, 128], [-1], [-1], [1, 10000, 10, 128], [-1], [-1], [0, 10000, 10, 128], [-1], [-1], [-1]], 
@@ -1005,7 +1034,12 @@ initialize()
 #                 [[-1], [-1], [-1], [-1], [-1], [0, 10000, 10, 128], [-1], [-1], [-1], [-1]] ]
 
 if TEST_CASE == 1:
-    nodes = [[1, 1, 0, 0, 1, 160000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]
+    nodes = [[1, 1, 0, 0, 1, 160000000, 0, 0],
+             [1, 0, 1, 0, 1, 0, 0, 0],
+             [0, 0, 0],
+             [0, 0, 0],
+             [0, 0, 0],
+             [0, 0, 0]]
     topology = [ [[-1], [-1], [0, 15000, 10, 64], [-1], [-1], [-1]], 
              [[-1], [-1], [-1], [-1], [-1], [0, 10000, 10, 64]], 
              [[0, 15000, 10, 64], [-1], [-1], [1, 10000, 10, 64], [1, 10000, 10, 64], [-1]], 
@@ -1013,7 +1047,16 @@ if TEST_CASE == 1:
              [[-1], [-1], [1, 10000, 10, 64], [-1], [-1], [0, 10000, 10, 64]], 
              [[-1], [0, 10000, 10, 64], [-1], [0, 10000, 10, 64], [0, 10000, 10, 64], [-1]] ]
 elif TEST_CASE == 2:
-    nodes = [[1, 1, 0, 0, 1, 80000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [1, 1, 0, 6, 7, 40000000, 0, 2000], [1, 0, 1, 6, 7, 0, 0, 0], [1, 1, 0, 8, 9, 40000000, 0, 4000], [1, 0, 1, 8, 9, 0, 0, 0]]
+    nodes = [[1, 1, 0, 0, 1, 80000000, 0, 0], 
+             [1, 0, 1, 0, 1, 0, 0, 0], 
+             [0, 0, 0],
+             [0, 0, 0],
+             [0, 0, 0],
+             [0, 0, 0],
+             [1, 1, 0, 6, 7, 40000000, 0, 2000], 
+             [1, 0, 1, 6, 7, 0, 0, 0],
+             [1, 1, 0, 8, 9, 40000000, 0, 4000],
+             [1, 0, 1, 8, 9, 0, 0, 0]]
     topology = [ [[-1], [-1], [0, 10000, 10, 128], [-1], [-1], [-1], [-1], [-1], [-1], [-1]], 
                  [[-1], [-1], [-1], [-1], [-1], [0, 10000, 10, 128], [-1], [-1], [-1], [-1]], 
                  [[0, 10000, 10, 128], [-1], [-1], [1, 10000, 10, 128], [-1], [-1], [0, 10000, 10, 128], [-1], [-1], [-1]], 
