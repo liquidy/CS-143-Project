@@ -184,10 +184,10 @@ class Simulation():
         n = 0
         for m in throughputs:
             L = len(m.yseries())
-            deltay = [a-b for a,b in zip(m.yseries()[2*THROUGHPUT_AVERAGE:L],m.yseries()[0:L-2*THROUGHPUT_AVERAGE])]
-            deltax = [a-b for a,b in zip(m.tseries()[2*THROUGHPUT_AVERAGE:L],m.tseries()[0:L-2*THROUGHPUT_AVERAGE])]
+            deltay = [a-b for a,b in zip(m.yseries()[2*self.globs.THROUGHPUT_AVERAGE:L],m.yseries()[0:L-2*self.globs.THROUGHPUT_AVERAGE])]
+            deltax = [a-b for a,b in zip(m.tseries()[2*self.globs.THROUGHPUT_AVERAGE:L],m.tseries()[0:L-2*self.globs.THROUGHPUT_AVERAGE])]
             thru = [float(a)/b for a,b in zip(deltay,deltax)]
-            plt.plot(m.tseries()[THROUGHPUT_AVERAGE:L-THROUGHPUT_AVERAGE], thru)
+            plt.plot(m.tseries()[self.globs.THROUGHPUT_AVERAGE:L-self.globs.THROUGHPUT_AVERAGE], thru)
             plt.title(m.name)
             plt.xlabel("Time")
             plt.ylabel("Bits per Second")

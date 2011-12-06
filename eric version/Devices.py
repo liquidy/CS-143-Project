@@ -449,8 +449,7 @@ class Source(Device):
             self.windowSizeMonitor.observe(self.windowSize)
             if len(self.outstandingPackets) == 0 and \
                     self.globs.PACKET_SIZE * self.numPacketsSent >= self.bitsToSend:
-                global flowsDone
-                flowsDone += 1
+                self.globs.flowsDone += 1
 
         
 ################################################################################            
