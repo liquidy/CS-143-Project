@@ -41,6 +41,9 @@ class SourceTimer(Process):
         self.time = time         # the length of time before timer times out
         self.source = source     # the object which sends the packets
     
+    #
+    # Called when Timer is activated.
+    #
     def run(self):
         # While we still have outstanding packets
         while self.packet.packetID in self.source.outstandingPackets:
