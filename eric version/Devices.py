@@ -63,7 +63,7 @@ class Destination(Device):
         self.packetDelay = packetDelay   # monitor - collects stats
         self.packet = None               # the current packet we are dealing with
         self.missingPackets = []         # which packets have we not received yet?
-        self.currentPacketIDToAck = -1     # keeps track of the next packet ID to acknowledge
+        self.currentPacketIDToAck = -1   # keeps track of the next packet ID to acknowledge
         self.highestReceivedPacket = -1
 
     # Attach a Link to this Destination.
@@ -99,7 +99,7 @@ class Destination(Device):
                     self.missingPackets.remove(self.packet.packetID)
                 
                 # Non consecutive packets must be added to missing
-                for i in range(self.highestReceivedPacket+1,self.packet.packetID):
+                for i in range(self.highestReceivedPacket + 1, self.packet.packetID):
                     self.missingPackets.append(i)
                 
                 # Update the highest packets received    
@@ -110,23 +110,26 @@ class Destination(Device):
                 if len(self.missingPackets) == 0:
                     self.currentPacketIDToAck = self.highestReceivedPacket
                 else:
-                    self.currentPacketIDToAck = min(self.missingPackets)-1
+                    self.currentPacketIDToAck = min(self.missingPackets) - 1
                     
                 # send ack to currentAckPacketID packet and collect stats (happens always)
                 self.acknowledge()
                                     
-                if not now() == 0:
-                    # collect stats
-                    self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
-                    self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
+                # collect stats
+                self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
+                self.throughput.observe(self.numPacketsReceived * self.packet.size)
                     
             self.packet = None
      
+    # 
     # Called by link when it is time for a packet to reach this Destination.
+    #
     def receivePacket(self, packet):
         self.packet = packet
     
-    # sends ack once it receives packet
+    # 
+    # Sends ack once it receives a packet.
+    #
     def acknowledge(self):
         if not self.link.active:
             reactivate(self.link)
@@ -134,7 +137,9 @@ class Destination(Device):
         # send the ack packet (append it to the queue of this object's link)
         self.link.queue.append(self.createAckPacket())
         
-    # Generate a new ack packet.
+    # 
+    # Generates a new ack packet.
+    #
     def createAckPacket(self):
         message = "Acknowledgement packet " + str(self.currentPacketIDToAck) + "'s data goes here!"
         # create the packet object with the needed ack packet id, source id, etc.
@@ -143,8 +148,11 @@ class Destination(Device):
         activate(newPacket, newPacket.run())
         return newPacket    
 
-        
-# Source
+
+####################################################################################    
+# SOURCE
+####################################################################################
+
 class Source(Device):
 
     def __init__(self, ID, destinationID, bitsToSend, congControlAlg, startTime, sendRateMonitor, windowSizeMonitor, globs):
