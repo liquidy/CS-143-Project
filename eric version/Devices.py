@@ -159,192 +159,286 @@ class Destination(Device):
 
 class Source(Device):
 
-    def __init__(self, ID, destinationID, bitsToSend, congControlAlg, startTime, sendRateMonitor, windowSizeMonitor, globs):
+    def __init__(self, ID, destinationID, bitsToSend, congControlAlg, 
+                 startTime, sendRateMonitor, windowSizeMonitor, globs):
+        
+        # Call Device superclass
         Device.__init__(self, ID, globs)
+        
+        # Initialized to constants set at the top. May change as simulation continues.
+        self.alpha = self.globs.DEFAULT_ALPHA
+        self.ssthresh = self.globs.THRESHOLD
+        self.windowSize = self.globs.INIT_WINDOW_SIZE
+        self.congControlAlg = self.globs.CONGESTION_CONTROL_ALGORITHM
+        self.timeout = self.globs.ACK_TIMEOUT
+        
+        # Store the constructor inputs
         self.destinationID = destinationID
         self.bitsToSend = bitsToSend
-        self.congControlAlg = self.globs.CONGESTION_CONTROL_ALGORITHM
+        self.sendRateMonitor = sendRateMonitor
+        self.windowSizeMonitor = windowSizeMonitor
+        self.startTime = startTime
+        
+        # Set some additional variables
         self.roundTripTime = 0
-        self.windowSize = self.globs.INIT_WINDOW_SIZE
         self.currentPacketID = 0
         self.outstandingPackets = {}
         self.toRetransmit = []
         self.link = None
         self.active = False
-        self.sendRateMonitor = sendRateMonitor
-        self.windowSizeMonitor = windowSizeMonitor
-        self.startTime = startTime
         self.numMissingAcks = 5
         self.missingAck = 0
         self.numPacketsSent = 0
-        self.timeout = self.globs.ACK_TIMEOUT
-        self.enabledCCA = False
-        self.alpha = self.globs.DEFAULT_ALPHA
-        self.ssthresh = self.globs.THRESHOLD
+        self.enabledCCA = False          # False if in slow start, True otherwise
         
         # Variables for congestion control
         self.dupAcks = 0
         self.mostRecentAck = -1
         self.fastRecovery = False
-        self.rttMin = 0 # RTT for first packet
-        self.rtt = 0 # Average RTT for the last "numPacketsToTrack" packets
-        self.packetRttsToTrack = deque() # Queue tracking the last "numPacketsToTrack" packet RTTs
-        self.numPacketsToTrack = self.globs.NUM_PACKETS_TO_TRACK_FOR_RTT  # Number of packets to track in packetRttsToTrack
-        self.timePacketWasSent = {} # Dict that records the time that a packet was set
+        self.rttMin = 0                   # Minimum recorded RTT (constantly updated)
+        self.rtt = 0                      # Average RTT for the last "numPacketsToTrack" packets
+        self.packetRttsToTrack = deque()  # Queue tracking the last "numPacketsToTrack" packet RTTs
+        self.numPacketsToTrack = self.globs.NUM_PACKETS_TO_TRACK_FOR_RTT  # Number of packets to track for RTT
+        self.timePacketWasSent = {}       # Dict that records the time that a packet was set
 
+    # 
+    # Attach a Link to the Source.
+    #
     def addLink(self, link):
         self.link = link
     
+    #
+    # Get the min packetID with at least three dup Acks
+    #
+    def getPacketIdToRetransmit(self):
+        if self.dupAcks >= 3:
+            return self.mostRecentAck + 1
+        return -1
+    
+    #
+    # Continue to send packets while there are packets to send.
+    #
     def run(self):
         self.active = True
         packetIdToRetransmit = -1
-        yield hold, self, self.startTime
-        while True:       
+        
+        # wait for startTime if this Source needs to wait before it starts to run
+        yield hold, self, self.startTime       
+        
+        while True: 
+            # returns id to retransmit if we have at least 3 dup acks
+            # otherwise, returns -1
             packetIdToRetransmit = self.getPacketIdToRetransmit()
             
-            # First time we get 3DA
-            if self.enabledCCA and not self.fastRecovery and packetIdToRetransmit!= -1:
+            # first time we get 3 dup acks
+            if self.enabledCCA and not self.fastRecovery and packetIdToRetransmit != -1:
                 # Enter Fast Recovery if necessary
                 self.fastRecovery = True
                 self.ssthresh = self.windowSize / 2
                 self.windowSize = self.ssthresh + 3
                 self.dupAcks = 0
                 
-                # Create a new packet based on the packetID, and resent the packet
+                # Create a new packet based on the packetID, and resend the packet
                 message = "Packet " + str(packetIdToRetransmit) + "'s data goes here!"
-                # packetId, timesent, sourceID, destid, isroutermsg, isack, msg
-                newPacket = Packet(packetIdToRetransmit, now(), self.ID,
+                newPacket = Packet(packetIdToRetransmit, now(), self.ID, 
                         self.destinationID, False, False, message, self.globs)
+                
+                # send this new packet
                 activate(newPacket, newPacket.run())
                 self.sendPacketAgain(newPacket)
+                
+                # wait the needed prop delay
                 yield hold, self, newPacket.size/float(self.link.linkRate)
-            # resend anything, if need to
+                
+            # resend anything, if we have packets to retransmit 
+            # (this list will be filled with timeout packets)
             elif len(self.toRetransmit) > 0:
+                # returns whether or not a packet was retransmitted and if so, 
+                # the packet that was retransmitted
                 (didtransmit, p) = self.retransmitPacket()
-                if (didtransmit): # if transmitted, wait
+                
+                if didtransmit: # if transmitted, wait
                     yield hold, self, p.size/float(self.link.linkRate)
+                    
                     # collect stats
                     if not now() == 0:
                         self.link.buffMonitor.observe(len(self.link.queue))
                         self.link.dropMonitor.observe(self.link.droppedPackets)
-                        self.sendRateMonitor.observe(self.globs.PACKET_SIZE*self.numPacketsSent / float(now()))
+                        self.sendRateMonitor.observe(
+                                self.globs.PACKET_SIZE*self.numPacketsSent / float(now()))
                 
-            # If everything has been sent, go to sleep
-            elif (self.globs.PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
+            # if everything has been sent, go to sleep
+            elif self.globs.PACKET_SIZE * self.numPacketsSent >= self.bitsToSend:
                 self.active = False
                 yield passivate, self
                 self.active = True
+                
             # otherwise, send new packets!
             elif len(self.outstandingPackets) < self.windowSize:
                 # send a new packet
                 packet = self.createPacket()
                 self.sendPacket(packet)
-                # wait
+                
+                # wait the prop delay
                 yield hold, self, packet.size/float(self.link.linkRate)
+                
                 # collect stats
                 if not now() == 0:
                     self.link.buffMonitor.observe(len(self.link.queue))
                     self.link.dropMonitor.observe(self.link.droppedPackets)
                     self.sendRateMonitor.observe(self.globs.PACKET_SIZE*self.numPacketsSent / float(now()))
-            # nothing to retransmit and cannot send new packets
+                    
+            # nothing to retransmit and cannot send new packets, so just passivate
             else:
                 self.active = False
                 yield passivate, self
                 self.active = True
-            
+    
+    #
+    # Create a new packet to send.
+    #
     def createPacket(self):
         message = "Packet " + str(self.currentPacketID) + "'s data goes here!"
-        newPacket = Packet(self.currentPacketID, now(), self.ID,
+        newPacket = Packet(self.currentPacketID, now(), self.ID, 
                            self.destinationID, False, False, message, self.globs)
-        self.currentPacketID += 1
+        self.currentPacketID += 1     
         activate(newPacket, newPacket.run())
         return newPacket
     
-    # figures out if we need to retransmit anything, and retransmits it if so
+    #
+    # Figure out if we need to retransmit anything, and retransmit it if so.
+    # Return a boolean saying whether osmething was retransmitted, and if so, the
+    # packet that was retransmitted.
+    #
     def retransmitPacket(self):
         packet = None # the packet to send
-        # check if we need to resend anything, do nothing if nothing to resend
+        
+        # check if we need to resend anything, and do nothing if nothing to resend
         if len(self.toRetransmit) > 0:
             # keep popping packets off toRetr until we find one that is outstanding
             while len(self.toRetransmit) > 0:
                 pack = self.toRetransmit.pop(0)
-                if (pack.packetID in self.outstandingPackets):
+                if pack.packetID in self.outstandingPackets:
                     packet = pack
                     break
-            if (packet != None):
+                
+            # if we founda packet to retransmit
+            if packet != None:
                 # have a single packet which we need to resend
                 packet.timeSent = now()
                 self.sendPacketAgain(packet)
                 return (True, packet)
+        
+        # didnt retransmit 
         return (False, None)
             
     
+    #
+    # Send a given packet.
+    #
     def sendPacket(self, packet):
+        # if we still have packets to send
         if (self.globs.PACKET_SIZE * self.numPacketsSent < self.bitsToSend):
             self.numPacketsSent += 1
+            
+            # since we are just sending this packet it will be outstanding since
+            # we havent received an ack for it yet
             self.outstandingPackets[packet.packetID] = True
+            
+            # update the map of packets to times sent
             self.timePacketWasSent[packet.packetID] = now()
+            
+            # make sure the link is active
             if self.link.active is False:
                 reactivate(self.link)
                 self.link.active = True
             self.link.queue.append(packet)
+            
             # create the timer for this packet
-            t = SourceTimer(packet, self.timeout, self)
+            t = Timer(packet, self.timeout, self)
             activate(t, t.run())
     
+    #
+    # The given packet was dropped, so resend the input packet.
+    #
     def sendPacketAgain(self, packet):
+        # update the map of packets to times sent
         self.timePacketWasSent[packet.packetID] = now()
+        
+        # make sure link is active
         if self.link.active is False:
             reactivate(self.link)
             self.link.active = True
         self.link.queue.append(packet)
         
+    #
+    # This method is called whenever a packet needs to be received by Source.
+    #
     def receivePacket(self, packet):
+        # Do stuff if the packet is an ack, ignore if a router msg
         if packet.isAck:
-            # Count Acks
+            # Count acks
             if packet.packetID > self.mostRecentAck:
                 self.dupAcks = 0
             elif packet.packetID == self.mostRecentAck:
                 self.dupAcks += 1
             
-            # Remove the outstanding packets from the list
+            # Remove this packet from the list of outstanding packets if we receive a packet that
+            # was in that table
             if packet.packetID in self.outstandingPackets:
                 print "Ack " + str(packet.packetID)
+                
+                # if we receive a packet that was previously outstanding, then assume that we have 
+                # received all packets up to that packet, so delete all the previous possible 
+                # outstanding packets from the table
                 for key in self.outstandingPackets.keys():
                     if key <= packet.packetID:
                         del self.outstandingPackets[key]
                         
-            # Update window size
+            # Update window size in the appropriate manner
             if not self.enabledCCA:
                 self.windowSize += 1
+                
             elif self.congControlAlg == 'AIMD' and self.fastRecovery == False:            
                 self.windowSize += 1/float(math.floor(self.windowSize))
+                
             elif self.congControlAlg == 'VEGAS' and self.fastRecovery == False:
+                # Calculate RTT
                 packetRttTime = now() - self.timePacketWasSent[packet.packetID]
+                
                 # Set rttMin if has not been set yet
                 if self.rttMin == 0 or packetRttTime < self.rttMin:
                     self.rttMin = packetRttTime
+                
                 # Update packetRttsToTrack
                 self.packetRttsToTrack.append(packetRttTime)
+                
+                # Make sure we only keep the specified number of RTT times in the packetRttsToTrack 
+                # list since we will use that many values to calculate the avg RTT
                 if len(self.packetRttsToTrack) > self.numPacketsToTrack:
                     self.packetRttsToTrack.popleft()
+                # calculate the avg RTT
                 self.rtt = sum(self.packetRttsToTrack) / len(self.packetRttsToTrack)
-                # Update window size accordingly
+                
+                # Update window size accordingly once we know RTT
                 if (self.windowSize / self.rttMin - self.windowSize / self.rtt) < self.alpha:
                     self.windowSize += 1
                 else:
                     self.windowSize -= 1
-            # Get out fast recovery once missing packet was received
+                    
+            # Get out of fast recovery once missing packet was received
             elif self.fastRecovery and self.mostRecentAck < packet.packetID:
                 self.fastRecovery = False
                 self.windowSize = self.ssthresh
-            # Duplicate Ack
+                
+            # Duplicate ack
             elif self.fastRecovery and self.mostRecentAck == packet.packetID:
                 self.windowSize += 1/float(math.floor(self.windowSize))
+            
             else:
                 pass
                 
-            # Update most recent Ack
+            # Update most recent ack
             if self.mostRecentAck < packet.packetID:
                 self.mostRecentAck = packet.packetID
             
@@ -352,16 +446,12 @@ class Source(Device):
             if self.windowSize > self.ssthresh:
                 self.enabledCCA = True
                         
-            # Collecting Stats
+            # Collect Stats
             self.windowSizeMonitor.observe(self.windowSize)
-            if len(self.outstandingPackets) == 0 and (self.globs.PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
-                self.globs.flowsDone += 1
-    
-    # Get the min packetID with at least three dup Acks
-    def getPacketIdToRetransmit(self):
-        if self.dupAcks >= 3:
-            return self.mostRecentAck + 1
-        return -1
+            if len(self.outstandingPackets) == 0 and \
+                    self.globs.PACKET_SIZE * self.numPacketsSent >= self.bitsToSend:
+                global flowsDone
+                flowsDone += 1
 
         
 ################################################################################            
