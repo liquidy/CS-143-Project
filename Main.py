@@ -693,9 +693,10 @@ class Source(Device):
                 # wait the needed prop delay
                 yield hold, self, newPacket.size/float(self.link.linkRate)
                 
-            # resend anything, if we have packets to retransmit
+            # resend anything, if we have packets to retransmit 
+            # (this list will be filled with timeout packets)
             elif len(self.toRetransmit) > 0:
-                # returns whether or not a packet was retransmitted and
+                # returns whether or not a packet was retransmitted and if so,
                 # the packet that was retransmitted
                 (didtransmit, p) = self.retransmitPacket()
                 
@@ -748,6 +749,8 @@ class Source(Device):
     
     #
     # Figure out if we need to retransmit anything, and retransmit it if so.
+    # Return a boolean saying whether osmething was retransmitted, and if so, the
+    # packet that was retransmitted.
     #
     def retransmitPacket(self):
         packet = None # the packet to send
@@ -757,21 +760,29 @@ class Source(Device):
             # keep popping packets off toRetr until we find one that is outstanding
             while len(self.toRetransmit) > 0:
                 pack = self.toRetransmit.pop(0)
-                if (pack.packetID in self.outstandingPackets):
+                if pack.packetID in self.outstandingPackets:
                     packet = pack
                     break
-            if (packet != None):
+                
+            # if we founda packet to retransmit
+            if packet != None:
                 # have a single packet which we need to resend
                 packet.timeSent = now()
                 self.sendPacketAgain(packet)
                 return (True, packet)
-                
+        
+        # didnt retransmit 
         return (False, None)
             
     
+    #
+    # Send a given packet.
+    #
     def sendPacket(self, packet):
+        # if we still have packets to send
         if (PACKET_SIZE * self.numPacketsSent < self.bitsToSend):
             self.numPacketsSent += 1
+            
             self.outstandingPackets[packet.packetID] = True
             self.timePacketWasSent[packet.packetID] = now()
             if self.link.active is False:
@@ -847,8 +858,12 @@ class Source(Device):
             if len(self.outstandingPackets) == 0 and (PACKET_SIZE * self.numPacketsSent >= self.bitsToSend):
                 global flowsDone, numFlows
                 flowsDone += 1
-       
-       
+ 
+ 
+################################################################################            
+#                                   TIMER                                     #
+################################################################################
+
 # Timer
 # this is called every time a packet is sent. it waits the timeout
 # set by the source, then resends packet while it is in list of outst
