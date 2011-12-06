@@ -606,7 +606,7 @@ class Source(Device):
         # Call Device superclass
         Device.__init__(self, ID)
         
-        # Constants set at the top
+        # Initialized to constants set at the top. May change as simulation continues.
         self.alpha = DEFAULT_ALPHA
         self.ssthresh = THRESHOLD
         self.windowSize = INIT_WINDOW_SIZE
@@ -637,16 +637,17 @@ class Source(Device):
         self.dupAcks = 0
         self.mostRecentAck = -1
         self.fastRecovery = False
-        self.rttMin = 0                   # RTT for first packet
+        self.rttMin = 0                   # Minimum recorded RTT (constantly updated)
         self.rtt = 0                      # Average RTT for the last "numPacketsToTrack" packets
         self.packetRttsToTrack = deque()  # Queue tracking the last "numPacketsToTrack" packet RTTs
         self.numPacketsToTrack = NUM_PACKETS_TO_TRACK_FOR_RTT  # Number of packets to track in packetRttsToTrack
         self.timePacketWasSent = {}                            # Dict that records the time that a packet was set
 
-    
+    # Attach a Link to the Source.
     def addLink(self, link):
         self.link = link
     
+    # Process packets a
     def run(self):
         self.active = True
         packetIdToRetransmit = -1
