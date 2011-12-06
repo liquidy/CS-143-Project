@@ -488,7 +488,8 @@ class Router(Device):
         if type == "probe" and not self.rerouting:
             # no data; send probeAck to source with packet delay
             msg = ("probeAck", float(now()) - pkt.timeSent)
-            ack = Packet("Probe %d %d" % (self.ID, source), now(), self.ID, source, True, True, msg)
+            ack = Packet("Probe %d %d" % (self.ID, source),
+                         now(), self.ID, source, True, True, msg)
             activate(ack, ack.run())
             self.sendPacket(ack, self.routingTable[source])
         elif type == "probeAck" and not self.rerouting:
@@ -503,25 +504,31 @@ class Router(Device):
             # process the recieved data and check if done rerouting
             if self.rerouting == False:
                 self.initiateReroute()
-            pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, source, True, True, ("topAck", self.delayData))
+            pkt = Packet("Delay Data at %d" % (self.ID),
+                         now(), self.ID, source, True, True, 
+                         ("topAck", self.delayData))
             activate(pkt, pkt.run())
             self.sendPacket(pkt, self.routingTable[source])
             if not self.haveData[source]:
                 self.haveData[source] = True
                 self.updateNetwork(data)
-            if self.haveData == [True] * self.networkSize and self.haveAck == [True] * self.networkSize:
+            if self.haveData == [True] * self.networkSize and \
+                    self.haveAck == [True] * self.networkSize:
                 self.dijkstra()
         elif type == "topology":
             # data is list of (start, end, delay) tuples;
             # send topAck to source and and check if done rerouting
-            pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, source, True, True, ("topAck", self.delayData))
+            pkt = Packet("Delay Data at %d" % (self.ID),
+                         now(), self.ID, source, True, True,
+                         ("topAck", self.delayData))
             activate(pkt, pkt.run())
             self.sendPacket(pkt, self.routingTable[source])
             if self.rerouting:
                 if not self.haveData[source]:
                     self.haveData[source] = True
                     self.updateNetwork(data)
-                if self.haveData == [True] * self.networkSize and self.haveAck == [True] * self.networkSize:
+                if self.haveData == [True] * self.networkSize and \
+                        self.haveAck == [True] * self.networkSize:
                     self.dijkstra()
         elif type == "topAck" and self.rerouting:
             # data is list of (start, end, delay) tuples;
@@ -531,7 +538,8 @@ class Router(Device):
             if not self.haveData[source]:
                 self.haveData[source] = True
                 self.updateNetwork(data)
-            if self.haveData == [True] * self.networkSize and self.haveAck == [True] * self.networkSize:
+            if self.haveData == [True] * self.networkSize and \
+                    self.haveAck == [True] * self.networkSize:
                 self.dijkstra()
     
     ##
