@@ -8,16 +8,18 @@ import sys
 PACKET_SIZE = 8000
 #INIT_WINDOW_SIZE = 1000
 INIT_WINDOW_SIZE = 1
-THRESHOLD = 100
+THRESHOLD = 80
+
 ACK_TIMEOUT = 1000 # NEED TO ESTIMATE LATER
-DYNAMIC_ROUTING = True
+DYNAMIC_ROUTING = False
 PROBE_DROP_DELAY = 100
 PROBE_SAMPLE_SIZE = 50
 PROBE_RATE = 100
-DEFAULT_ALPHA = 0.0375
+DEFAULT_ALPHA = .6
 NUM_PACKETS_TO_TRACK_FOR_RTT = 10
+THROUGHPUT_AVERAGE = 20
 CONGESTION_CONTROL_ALGORITHM = "AIMD"
-TEST_CASE = 1
+TEST_CASE = 2
 
 ####################################################################################
 # DEVICE
@@ -124,11 +126,10 @@ class Destination(Device):
                     
                 # send ack to currentAckPacketID packet and collect stats (happens always)
                 self.acknowledge()
-                                    
-                if not now() == 0:
-                    # collect stats
-                    self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
-                    self.throughput.observe(self.numPacketsReceived * self.packet.size / float(now()))
+                                
+                # collect stats
+                self.packetDelay.observe(self.totalPacketDelay / float(self.numPacketsReceived))
+                self.throughput.observe(self.numPacketsReceived * self.packet.size)
                     
             self.packet = None
      
@@ -759,8 +760,9 @@ class Source(Device):
             elif self.congControlAlg == 'VEGAS' and self.fastRecovery == False:
                 packetRttTime = now() - self.timePacketWasSent[packet.packetID]
                 # Set rttMin if has not been set yet
-                if self.rttMin == 0:
+                if self.rttMin == 0 or packetRttTime < self.rttMin:
                     self.rttMin = packetRttTime
+                    
                 # Update packetRttsToTrack
                 self.packetRttsToTrack.append(packetRttTime)
                 if len(self.packetRttsToTrack) > self.numPacketsToTrack:
@@ -786,7 +788,7 @@ class Source(Device):
                 self.mostRecentAck = packet.packetID
             
             # Enable either AIMD or Vegas if windowSize > threshold
-            if self.windowSize > THRESHOLD:
+            if self.windowSize > self.ssthresh:
                 self.enabledCCA = True
                         
             # Collecting Stats
@@ -887,9 +889,9 @@ initialize()
 
 if TEST_CASE == 1:
     nodes = [[1, 1, 0, 0, 1, 160000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
-    topology = [ [[-1],[-1],[0,10000,10,64],[-1],[-1],[-1]], 
+    topology = [ [[-1],[-1],[0,15000,10,64],[-1],[-1],[-1]], 
              [[-1],[-1],[-1],[-1],[-1],[0,10000,10,64]], 
-             [[0, 10000, 10, 64],[-1],[-1],[1, 10000, 10, 64],[1, 10000, 10, 64],[-1]],
+             [[0, 15000, 10, 64],[-1],[-1],[1, 10000, 10, 64],[1, 10000, 10, 64],[-1]],
              [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
              [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
              [[-1],[0, 10000, 10, 64],[-1],[0, 10000, 10, 64],[0, 10000, 10, 64],[-1]] ]
@@ -1002,15 +1004,30 @@ for i in range(len(topology)):
                 droppedPackets.append(dropPacket)
             
 # The Main Simulation!               
-simulate(until = 50000)
+simulate(until = 200000)
 
 # Plot and save all the appropriate measurements. Output files are named outputName+data+(n).png.
 print 'producing graphs...'
 
+# Window Sizes    
+n = 0
+for m in windowSizes:
+    plt.plot(m.tseries(), m.yseries())
+    plt.title(m.name)
+    plt.xlabel("Time")
+    plt.ylabel("Packets")
+    plt.savefig(outputName+"windowSizes" + str(n) + ".png")
+    plt.clf()
+    n += 1
+
 # Throughputs
 n = 0
 for m in throughputs:
-    plt.plot(m.tseries(), m.yseries(),'o')
+    L = len(m.yseries())
+    deltay = [a-b for a,b in zip(m.yseries()[2*THROUGHPUT_AVERAGE:L],m.yseries()[0:L-2*THROUGHPUT_AVERAGE])]
+    deltax = [a-b for a,b in zip(m.tseries()[2*THROUGHPUT_AVERAGE:L],m.tseries()[0:L-2*THROUGHPUT_AVERAGE])]
+    thru = [float(a)/b for a,b in zip(deltay,deltax)]
+    plt.plot(m.tseries()[THROUGHPUT_AVERAGE:L-THROUGHPUT_AVERAGE], thru)
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
@@ -1021,7 +1038,7 @@ for m in throughputs:
 # Send Rates    
 n = 0
 for m in sendRates:
-    plt.plot(m.tseries(), m.yseries(),'o')
+    plt.plot(m.tseries(), m.yseries())
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Bits per Second")
@@ -1032,7 +1049,7 @@ for m in sendRates:
 # Packet Delays
 n = 0
 for m in packetDelays:
-    plt.plot(m.tseries(), m.yseries(),'o')
+    plt.plot(m.tseries(), m.yseries())
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Time")
@@ -1043,7 +1060,7 @@ for m in packetDelays:
 # Buffer Occupancies    
 n = 0
 for m in bufferOccs:
-    plt.plot(m.tseries(), m.yseries(),'o')
+    plt.plot(m.tseries(), m.yseries())
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Packets")
@@ -1054,7 +1071,7 @@ for m in bufferOccs:
 # Dropped Packets    
 n = 0
 for m in droppedPackets:
-    plt.plot(m.tseries(), m.yseries(),'o')
+    plt.plot(m.tseries(), m.yseries())
     plt.title(m.name)
     plt.xlabel("Time")
     plt.ylabel("Packets")
@@ -1063,25 +1080,16 @@ for m in droppedPackets:
     n += 1
 
 # Link Flow Rates    
-n = 0
-for m in linkFlowRates:
-    plt.plot(m.tseries(), m.yseries(),'o')
-    plt.title(m.name)
-    plt.xlabel("Time")
-    plt.ylabel("Bits per Second")
-    plt.savefig(outputName+"linkSendRate" + str(n) + ".png")
-    plt.clf()
-    n += 1
+#n = 0
+#for m in linkFlowRates:
+#    plt.plot(m.tseries(), m.yseries(),'o')
+#    plt.title(m.name)
+#    plt.xlabel("Time")
+#    plt.ylabel("Bits per Second")
+#    plt.savefig(outputName+"linkSendRate" + str(n) + ".png")
+#    plt.clf()
+#    n += 1
 
-# Window Sizes    
-n = 0
-for m in windowSizes:
-    plt.plot(m.tseries(), m.yseries(),'o')
-    plt.title(m.name)
-    plt.xlabel("Time")
-    plt.ylabel("Packets")
-    plt.savefig(outputName+"windowSizes" + str(n) + ".png")
-    plt.clf()
-    n += 1
+
 
 print("done")
