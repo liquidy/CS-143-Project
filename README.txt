@@ -34,7 +34,9 @@ Configure the simulator by editing the default values for the fields in Global:
 
     TEST_CASE: 1 or 2 for the required test cases, or a tuple to be interpreted
         as a custom network topology
+________________________________________________________________________________
 ____TODO: explain input format__________________________________________________
+________________________________________________________________________________
 
 numFlows and flowsDone are determined while initializing the test case;
 they should not be changed.
