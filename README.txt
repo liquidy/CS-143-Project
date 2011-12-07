@@ -41,15 +41,11 @@ Configure the simulator by editing the default values for the fields in Global:
 
     CONGESTION_CONTROL_ALGORITHM: "AIMD" or "VEGAS"
 
-    TEST_CASE: 1 or 2 for the required test cases, or a tuple to be interpreted
-               as a custom network topology
+    TEST_CASE: 1 or 2 for the required test cases
 
 ________________________________________________________________________________
 ____TODO: explain input format__________________________________________________
 ________________________________________________________________________________
-
-NOTE: numFlows and flowsDone are determined while initializing the test case;
-      they should not be changed.
 
 =============================================================================================
 
@@ -57,7 +53,14 @@ To run the simulation, simply run Simulation.py
 
 =============================================================================================
 
-How the data is output:
-# TODO
+Graphs are produced in the working directory for:
+    
+    - buffer occupancies and dropped packets at monitored links
+    - send rates and window sizes at each source
+    - throughputs and packet delays at each destination
+
+Each graph is saved as a .png image with a name indicating which test case was used, whether
+dynamic routing was used, which congestion control algorithm was used, and what is shown on
+the graph.
 
 ---- END README----
