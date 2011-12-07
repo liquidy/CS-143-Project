@@ -608,7 +608,7 @@ class Router(Device):
         # broadcast rerouting signal with new delayData
         for i in range(self.networkSize):
             if i is not self.ID:
-                if not (nodes[i][1] or nodes[i][2]): # if device i is a router
+                if not (self.globs.nodes[i][1] or self.globs.nodes[i][2]): # if device i is a router
                     pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, i, True, False, ("reroute", self.delayData), self.globs)
                     activate(pkt, pkt.run())
                     self.sendPacket(pkt, self.routingTable[i])
