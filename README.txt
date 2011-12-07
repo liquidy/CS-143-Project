@@ -11,32 +11,43 @@ Authors:
 
 =============================================================================================
 
-Configure the simulator by editing the default values for the fields in Global:
+The simulator can be configured during runtime by following the instructions
+presented on your terminal.  The default parameter values can only be changed
+by editing Global.py.  The configuration parameters are:
 
     PACKET_SIZE: packet size in bits
+                 (integer)
 
     INIT_WINDOW_SIZE: initial source window size in packets
+                      (integer)
 
     THRESHOLD: initial slow start threshold in packets
+               (integer)
 
     ACK_TIMEOUT: acknowledgement timeout in milliseconds
+                 (float or integer)
 
     DYNAMIC_ROUTING: whether or not to use dynamic routing
+                     (boolean)
 
     PROBE_DROP_DELAY: packet delay in milliseconds recorded for a link when a
                       router probe is dropped
+                      (float or integer)
 
     PROBE_SAMPLE_SIZE: number of delay data points to collect for a single link
                        before rerouting
+                       (integer)
 
     PROBE_RATE: time in milliseconds to wait between sending router probes
+                (float or integer)
 
     DEFAULT_ALPHA: the value of the parameter alpha used in TCP VEGAS; in units
                    of packets/millisecond
+                   (float or integer)
 
     NUM_PACKETS_TO_TRACK_FOR_RTT: number of packets whose RTT is averaged to
                                   determined how to adjust the window size in TCP VEGAS
-    
+                                  (integer)
     THROUGHPUT_AVERAGE: 
 
     CONGESTION_CONTROL_ALGORITHM: "AIMD" or "VEGAS"
@@ -49,7 +60,7 @@ ________________________________________________________________________________
 
 =============================================================================================
 
-To run the simulation, simply run Simulation.py
+To run the simulation, run Simulation.py and follow the instructions presented on your terminal.
 
 =============================================================================================
 
