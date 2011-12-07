@@ -20,7 +20,7 @@ class RoutingTimer(Process):
     def run(self):
         while True:
             yield hold, self, self.time
-            if router.globs.flowsDone == router.globs.numFlows: # If the simulation is over, stop
+            if self.router.globs.flowsDone == self.router.globs.numFlows: # If the simulation is over, stop
                 yield passivate, self
             self.router.timerHandler()
 
