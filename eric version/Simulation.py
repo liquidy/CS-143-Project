@@ -72,6 +72,7 @@ class Simulation():
         else:
             nodes = self.globs.TEST_CASE[0]
             topology = self.globs.TEST_CASE[1]
+        self.globs.nodes = nodes
         
         # Global Arrays of the Network Objects. Devices includes all the Sources, Destinations, and Routers, and links includes all the link objects.
         devices = []
@@ -85,6 +86,10 @@ class Simulation():
         bufferOccs = []
         droppedPackets = []
         linkFlowRates = []
+        
+        # Global values for determining when the simulation is over
+        self.globs.numFlows = 0
+        self.globs.flowsDone = 0
         
         # Output is written to files with names such as outputName+"throughputs(n).png"
         outputName = 'TestCase' + str(self.globs.TEST_CASE)
@@ -256,4 +261,12 @@ class Simulation():
         
 if __name__ == '__main__':
     sim = Simulation()
+    cmd = None
+    while cmd != '':
+        cmd = raw_input('Current parameters are:\n\n%s\n\n' % (sim.globs) +\
+                        'Press Enter to start the simulation\n' +\
+                        'or type <PARAMETER_NAME newValue> and press Enter '+\
+                                                      'to change a parameter\n'+\
+                        'or type ALL and press Enter to change all parameters\n')
+        sim.globs.setParams(cmd)
     sim.run()
