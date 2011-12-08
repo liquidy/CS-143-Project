@@ -50,7 +50,7 @@ by editing Global.py.  The configuration parameters are:
                                   (integer)
 
     AVERAGE_INTERVAL: The number of packets whose receiving times are averaged over to
-                      determine the throughput and packeet delay. 
+                      determine the throughput and packet delay. 
                       (integer)
 
     CONGESTION_CONTROL_ALGORITHM: "AIMD" or "VEGAS"
