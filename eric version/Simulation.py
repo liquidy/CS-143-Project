@@ -189,8 +189,8 @@ class Simulation():
         for m in windowSizes:
             plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
-            plt.xlabel("Time")
-            plt.ylabel("Packets")
+            plt.xlabel("Time (ms)")
+            plt.ylabel("Window Size (Packets)")
             plt.savefig(outputName+"windowSizes" + str(n) + ".png")
             plt.clf()
             n += 1
@@ -202,10 +202,12 @@ class Simulation():
             deltay = [a-b for a,b in zip(m.yseries()[2*self.globs.THROUGHPUT_AVERAGE:L],m.yseries()[0:L-2*self.globs.THROUGHPUT_AVERAGE])]
             deltax = [a-b for a,b in zip(m.tseries()[2*self.globs.THROUGHPUT_AVERAGE:L],m.tseries()[0:L-2*self.globs.THROUGHPUT_AVERAGE])]
             thru = [float(a)/b for a,b in zip(deltay,deltax)]
+            timeavThru = [a*b for a,b in zip(thru,m.tseries()[self.globs.THROUGHPUT_AVERAGE:L-self.globs.THROUGHPUT_AVERAGE])]
+            print("The Average of " + m.name + " is " + timeavThru/float(sum(m.tseries()[self.globs.THROUGHPUT_AVERAGE:L-self.globs.THROUGHPUT_AVERAGE])))
             plt.plot(m.tseries()[self.globs.THROUGHPUT_AVERAGE:L-self.globs.THROUGHPUT_AVERAGE], thru)
             plt.title(m.name)
-            plt.xlabel("Time")
-            plt.ylabel("Bits per Second")
+            plt.xlabel("Time (ms)")
+            plt.ylabel("Throughput (bpms)")
             plt.savefig(outputName+"throughput" + str(n) + ".png")
             plt.clf()
             n += 1
@@ -215,8 +217,8 @@ class Simulation():
         for m in sendRates:
             plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
-            plt.xlabel("Time")
-            plt.ylabel("Bits per Second")
+            plt.xlabel("Time (ms)")
+            plt.ylabel("Send Rate (bpms)")
             plt.savefig(outputName+"sendRate" + str(n) + ".png")
             plt.clf()
             n += 1
@@ -224,10 +226,11 @@ class Simulation():
         # Packet Delays
         n = 0
         for m in packetDelays:
+            print("Average of "+ m.name + " is " + m.timeAverage())
             plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
-            plt.xlabel("Time")
-            plt.ylabel("Time")
+            plt.xlabel("Packet Delay (ms)")
+            plt.ylabel("Time (ms)")
             plt.savefig(outputName+"packetDelay" + str(n) + ".png")
             plt.clf()
             n += 1
@@ -235,10 +238,12 @@ class Simulation():
         # Buffer Occupancies    
         n = 0
         for m in bufferOccs:
+            print("Average of "+ m.name + " is " + m.timeAverage())
+            print("Variance of "+m.name + " is " + m.timeVariance())
             plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
-            plt.xlabel("Time")
-            plt.ylabel("Packets")
+            plt.xlabel("Time (ms)")
+            plt.ylabel("Buffer Occupancy (Packets)")
             plt.savefig(outputName+"bufferOccupancies" + str(n) + ".png")
             plt.clf()
             n += 1
@@ -246,24 +251,25 @@ class Simulation():
         # Dropped Packets    
         n = 0
         for m in droppedPackets:
+            print("Average of "+m.name + " is " + m.timeAverage())
             plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
-            plt.xlabel("Time")
+            plt.xlabel("Time (ms)")
             plt.ylabel("Packets")
             plt.savefig(outputName+"droppedPackets" + str(n) + ".png")
             plt.clf()
             n += 1
         
         # Link Flow Rates    
-        #n = 0
-        #for m in linkFlowRates:
-        #    plt.plot(m.tseries(), m.yseries(),'o')
-        #    plt.title(m.name)
-        #    plt.xlabel("Time")
-        #    plt.ylabel("Bits per Second")
-        #    plt.savefig(outputName+"linkSendRate" + str(n) + ".png")
-        #    plt.clf()
-        #    n += 1
+        n = 0
+        for m in linkFlowRates:
+            plt.plot(m.tseries(), m.yseries(),'o')
+            plt.title(m.name)
+            plt.xlabel("Time (ms)")
+            plt.ylabel("Link Flow (bpms)")
+            plt.savefig(outputName+"linkSendRate" + str(n) + ".png")
+            plt.clf()
+            n += 1
         
         
         
