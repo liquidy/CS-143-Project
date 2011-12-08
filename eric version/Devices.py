@@ -421,9 +421,9 @@ class Source(Device):
                 
                 # Update window size accordingly once we know RTT
                 if (self.windowSize / self.rttMin - self.windowSize / self.rtt) < self.alpha:
-                    self.windowSize += 1/float(math.floor(self.windowSize))
+                    self.windowSize += 1
                 else:
-                    self.windowSize -= 1/float(math.floor(self.windowSize))
+                    self.windowSize -= 1
                     
             # Get out of fast recovery once missing packet was received
             elif self.fastRecovery and self.mostRecentAck < packet.packetID:
@@ -432,7 +432,7 @@ class Source(Device):
                 
             # Duplicate ack
             elif self.fastRecovery and self.mostRecentAck == packet.packetID:
-                self.windowSize += 1
+                self.windowSize += 1/float(math.floor(self.windowSize))
             
             else:
                 pass
@@ -608,7 +608,7 @@ class Router(Device):
         # broadcast rerouting signal with new delayData
         for i in range(self.networkSize):
             if i is not self.ID:
-                if not (self.globs.nodes[i][1] or self.globs.nodes[i][2]): # if device i is a router
+                if not (self.globs.NODES[i][1] or self.globs.NODES[i][2]): # if device i is a router
                     pkt = Packet("Delay Data at %d" % (self.ID), now(), self.ID, i, True, False, ("reroute", self.delayData), self.globs)
                     activate(pkt, pkt.run())
                     self.sendPacket(pkt, self.routingTable[i])
