@@ -421,9 +421,9 @@ class Source(Device):
                 
                 # Update window size accordingly once we know RTT
                 if (self.windowSize / self.rttMin - self.windowSize / self.rtt) < self.alpha:
-                    self.windowSize += 1
+                    self.windowSize += 1/float(math.floor(self.windowSize))
                 else:
-                    self.windowSize -= 1
+                    self.windowSize -= 1/float(math.floor(self.windowSize))
                     
             # Get out of fast recovery once missing packet was received
             elif self.fastRecovery and self.mostRecentAck < packet.packetID:
@@ -432,7 +432,7 @@ class Source(Device):
                 
             # Duplicate ack
             elif self.fastRecovery and self.mostRecentAck == packet.packetID:
-                self.windowSize += 1/float(math.floor(self.windowSize))
+                self.windowSize += 1
             
             else:
                 pass
