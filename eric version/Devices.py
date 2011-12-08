@@ -379,7 +379,7 @@ class Source(Device):
             # Count acks
             if packet.packetID > self.mostRecentAck:
                 self.dupAcks = 0
-            elif packet.packetID == self.mostRecentAck:
+            elif packet.packetID == self.mostRecentAck and not self.fastRecovery:
                 self.dupAcks += 1
             
             # Remove this packet from the list of outstanding packets if we receive a packet that
