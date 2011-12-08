@@ -59,7 +59,7 @@ by editing Global.py.  The configuration parameters are:
                NODES and TOPOLOGY defined in Global.py
 
 
-***NODES and TOPOLOGY can not be changed from the terminal; to change them, edit Global.py***
+*** NODES and TOPOLOGY can not be changed from the terminal; to change them, edit Global.py ***
 
     NODES: This is an array holding the data for the flows and routers. Each elemet of NODES is an array containing
            the data, [ID, isSource, isDestination, isRouter, isMonitored, sourceID, destID, bitsToSend, startTime].
