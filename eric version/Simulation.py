@@ -18,18 +18,18 @@ class Simulation():
 
         # The input parameters: 
         #
-        # nodes[][] is a 2-way array with nodes[i] being the list [ID, isSource,isDest,isRouter,isMonitored,sourceID,destID,numbits,starttime] if the node is a source
+        # NODES[][] is a 2-way array with NODES[i] being the list [ID, isSource,isDest,isRouter,isMonitored,sourceID,destID,numbits,starttime] if the node is a source
         # or destination, and [ID,0,0,1] otherwise if it is a router.
         #
-        # topology[][][] is a 3-way array with topology[i][j] being the list [isMonitored, rate, propTime, bufferCapacity] for the link between nodes i and j,
+        # TOPOLOGY[][][] is a 3-way array with TOPOLOGY[i][j] being the list [isMonitored, rate, propTime, bufferCapacity] for the link between nodes i and j,
         # and [-1] if one does not exist.  
         #
         # Everything is on the scale of bits and milliseconds.
         #
         # Common test cases are the following:
         # Test Case 1:
-        #    nodes = [[0,1,0,0,1,0,1,160000000,0], [1,0,1,0,1,0,1],[2,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1]]
-        #    topology = [ [[-1],[-1],[0,10000,10,64],[-1],[-1],[-1]], 
+        #    NODES = [[0,1,0,0,1,0,1,160000000,0], [1,0,1,0,1,0,1],[2,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1]]
+        #    TOPOLOGY = [ [[-1],[-1],[0,10000,10,64],[-1],[-1],[-1]], 
         #                 [[-1],[-1],[-1],[-1],[-1],[0,10000,10,64]], 
         #                 [[0, 10000, 10, 64],[-1],[-1],[1, 10000, 10, 64],[1, 10000, 10, 64],[-1]],
         #                 [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
@@ -37,8 +37,8 @@ class Simulation():
         #                 [[-1],[0, 10000, 10, 64],[-1],[0, 10000, 10, 64],[0, 10000, 10, 64],[-1]] ]
         #
         # Test Case 2:
-        #    nodes = [[0,1,0,0,1,0,1,160000000,0],[1,0,1,0,1,0,1],[2,0,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1],[6,1,0,0,1,6,7,100000000,2000],[7,0,1,0,1,6,7],[8,1,0,0,1,8,9,100000000,13000],[9,0,1,0,1,8,9]]
-        #    topology = [ [[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+        #    NODES = [[0,1,0,0,1,0,1,160000000,0],[1,0,1,0,1,0,1],[2,0,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1],[6,1,0,0,1,6,7,100000000,2000],[7,0,1,0,1,6,7],[8,1,0,0,1,8,9,100000000,13000],[9,0,1,0,1,8,9]]
+        #    TOPOLOGY = [ [[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
         #                 [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]],
         #                 [[0,20000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1]],
         #                 [[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1],[-1]],
@@ -50,19 +50,19 @@ class Simulation():
         #                 [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]] ]
         
         if self.globs.TEST_CASE == 1:
-            nodes = [[0,1,0,0,1,0,1,160000000,0], [1,0,1,0,1,0,1],[2,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1]]
-            topology = [ [[-1],[-1],[0,10000,10,64],[-1],[-1],[-1]], 
+            NODES = [[0,1,0,0,1,0,1,160000000,0], [1,0,1,0,1,0,1],[2,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1]]
+            TOPOLOGY = [ [[-1],[-1],[0,10000,10,64],[-1],[-1],[-1]], 
                          [[-1],[-1],[-1],[-1],[-1],[0,10000,10,64]], 
                          [[0, 10000, 10, 64],[-1],[-1],[1, 10000, 10, 64],[1, 10000, 10, 64],[-1]],
                          [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
                          [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
                          [[-1],[0, 10000, 10, 64],[-1],[0, 10000, 10, 64],[0, 10000, 10, 64],[-1]] ]
-            self.globs.NODES = nodes
-            self.globs.TOPOLOGY = topology
+            self.globs.NODES = NODES
+            self.globs.TOPOLOGY = TOPOLOGY
                          
         elif self.globs.TEST_CASE == 2:
-            nodes = [[0,1,0,0,1,0,1,160000000,0],[1,0,1,0,1,0,1],[2,0,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1],[6,1,0,0,1,6,7,100000000,2000],[7,0,1,0,1,6,7],[8,1,0,0,1,8,9,100000000,13000],[9,0,1,0,1,8,9]]
-            topology = [ [[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+            NODES = [[0,1,0,0,1,0,1,160000000,0],[1,0,1,0,1,0,1],[2,0,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1],[6,1,0,0,1,6,7,100000000,2000],[7,0,1,0,1,6,7],[8,1,0,0,1,8,9,100000000,13000],[9,0,1,0,1,8,9]]
+            TOPOLOGY = [ [[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
                          [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]],
                          [[0,20000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1]],
                          [[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1],[-1]],
@@ -72,12 +72,12 @@ class Simulation():
                          [[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
                          [[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1]],
                          [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]] ]
-            self.globs.NODES = nodes
-            self.globs.TOPOLOGY = topology
+            self.globs.NODES = NODES
+            self.globs.TOPOLOGY = TOPOLOGY
             
         else:
-            nodes = self.globs.NODES
-            topology = self.globs.TOPOLOGY
+            NODES = self.globs.NODES
+            TOPOLOGY = self.globs.TOPOLOGY
         
         # Global Arrays of the Network Objects. Devices includes all the Sources, Destinations, and Routers, and links includes all the link objects.
         devices = []
@@ -103,47 +103,47 @@ class Simulation():
         outputName += self.globs.CONGESTION_CONTROL_ALGORITHM
         
         # For each device in the nodes, instantiate the appropriate device with its monitors
-        for i in range(len(nodes)):
+        for i in range(len(NODES)):
             # If the device is a source ...
-            if nodes[i][1]:
+            if NODES[i][1]:
                 self.globs.numFlows += 1
                 
                 # Create the monitors
-                sendRateMonitor = Monitor(name = 'Send Rate of Source ' + str(nodes[i][0]))
-                windowSizeMonitor = Monitor(name = 'Window Size of Source '+str(nodes[i][0]))
+                sendRateMonitor = Monitor(name = 'Send Rate of Source ' + str(NODES[i][0]))
+                windowSizeMonitor = Monitor(name = 'Window Size of Source '+str(NODES[i][0]))
                 
                 # Create the object, add it to the list of devices, and activate it
-                source = Source(nodes[i][0], nodes[i][6], nodes[i][7], nodes[i][8], sendRateMonitor, windowSizeMonitor, self.globs)
+                source = Source(NODES[i][0], NODES[i][6], NODES[i][7], NODES[i][8], sendRateMonitor, windowSizeMonitor, self.globs)
                 devices.append(source)
                 activate(source, source.run())
                 
                 # If this node should be monitored, add its monitors to the arrays
-                if nodes[i][4]:
+                if NODES[i][4]:
                     sendRates.append(sendRateMonitor)
                     windowSizes.append(windowSizeMonitor)
                     
             # If the device is a destination ...        
-            elif nodes[i][2]:
+            elif NODES[i][2]:
                 
                 # Create the Monitors 
                 thru = Monitor(name = 'Throughput to Destination ' + str(id))
                 pDelay = Monitor(name = 'Packet Delays of Destination ' + str(id))
             
                 # Create the object, add it to the list of devices, and activate it
-                dest = Destination(nodes[i][0], nodes[i][5], thru, pDelay, self.globs)
+                dest = Destination(NODES[i][0], NODES[i][5], thru, pDelay, self.globs)
                 devices.append(dest)
                 activate(dest, dest.run())
                 
                 # If this node should be monitored, add its monitors to the arrays
-                if nodes[i][4]:
+                if NODES[i][4]:
                     packetDelays.append(pDelay)
                     throughputs.append(thru)
         
             # If the device is a router ...
-            elif nodes[i][3]:
+            elif NODES[i][3]:
                 
                 # Create the object, add it to the list of devices, and activate it
-                router = Router(nodes[i][0],topology, self.globs)
+                router = Router(NODES[i][0],TOPOLOGY, self.globs)
                 devices.append(router)
                 activate(router, router.run())
             
@@ -153,11 +153,11 @@ class Simulation():
                 assert(False)
                                     
         # For each link in the topology, instantiate the appropriate link with its monitors
-        for i in range(len(topology)):
-            for j in range(len(topology[i])):
+        for i in range(len(TOPOLOGY)):
+            for j in range(len(TOPOLOGY[i])):
                 
-                # If there is a link between node i and node j (i.e. topology[i][j] isn't [-1]) ...
-                if len(topology[i][j]) > 1:
+                # If there is a link between node i and node j (i.e. TOPOLOGY[i][j] isn't [-1]) ...
+                if len(TOPOLOGY[i][j]) > 1:
                     
                     # Create the monitors
                     buffOcc = Monitor(name = 'Buffer Occupancies of the Link From ' + str(i) + ' to ' + str(j))
@@ -165,7 +165,7 @@ class Simulation():
                     flowRate = Monitor(name = 'Link Flow Rate of the Link From ' + str(i) + ' to ' + str(j))
                     
                     # Create the object, add it to the list of links, and activate it
-                    link = Link(topology[i][j][1], devices[i], devices[j], topology[i][j][2], topology[i][j][3], buffOcc, dropPacket, flowRate)
+                    link = Link(TOPOLOGY[i][j][1], devices[i], devices[j], TOPOLOGY[i][j][2], TOPOLOGY[i][j][3], buffOcc, dropPacket, flowRate)
                     links.append(link)            
                     activate(link, link.run())
                     
@@ -173,7 +173,7 @@ class Simulation():
                     devices[i].addLink(link)
                     
                     # If this link should be monitored, add its monitors to the arrays
-                    if topology[i][j][0]:
+                    if TOPOLOGY[i][j][0]:
                         linkFlowRates.append(flowRate)
                         bufferOccs.append(buffOcc)
                         droppedPackets.append(dropPacket)
