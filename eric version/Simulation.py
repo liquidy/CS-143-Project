@@ -18,8 +18,8 @@ class Simulation():
 
         # The input parameters: 
         #
-        # nodes[][] is a 2-way array with nodes[i] being the list [isMonitored,isSource,isDest,sourceID,destID,numbits,congID,starttime] if the node is a source
-        # or destination, and [0,0,0] otherwise if it is a router.
+        # nodes[][] is a 2-way array with nodes[i] being the list [ID, isSource,isDest,isRouter,isMonitored,sourceID,destID,numbits,starttime] if the node is a source
+        # or destination, and [ID,0,0,1] otherwise if it is a router.
         #
         # topology[][][] is a 3-way array with topology[i][j] being the list [isMonitored, rate, propTime, bufferCapacity] for the link between nodes i and j,
         # and [-1] if one does not exist.  
@@ -28,7 +28,7 @@ class Simulation():
         #
         # Common test cases are the following:
         # Test Case 1:
-        #    nodes = [[1, 1, 0, 0, 1, 160000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
+        #    nodes = [[0,1,0,0,1,0,1,160000000,0], [1,0,1,0,1,0,1],[2,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1]]
         #    topology = [ [[-1],[-1],[0,10000,10,64],[-1],[-1],[-1]], 
         #                 [[-1],[-1],[-1],[-1],[-1],[0,10000,10,64]], 
         #                 [[0, 10000, 10, 64],[-1],[-1],[1, 10000, 10, 64],[1, 10000, 10, 64],[-1]],
@@ -37,38 +37,39 @@ class Simulation():
         #                 [[-1],[0, 10000, 10, 64],[-1],[0, 10000, 10, 64],[0, 10000, 10, 64],[-1]] ]
         #
         # Test Case 2:
-        #    nodes = [[1,1,0,0,1,80000000,0,0],[1,0,1,0,1,0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[1,1,0,6,7,40000000,0,2000],[1,0,1,6,7,0,0,0],[1,1,0,8,9,40000000,0,4000],[1,0,1,8,9,0,0,0]]
-        #    topology = [ [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
-        #                 [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]],
-        #                 [[0,10000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1]],
-        #                 [[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1],[-1]],
-        #                 [[-1],[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1]],
-        #                 [[-1],[0,10000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1],[0,10000,10,128]],
-        #                 [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
-        #                 [[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
-        #                 [[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1]],
-        #                 [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]] ]
+        #    nodes = [[0,1,0,0,1,0,1,160000000,0],[1,0,1,0,1,0,1],[2,0,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1],[6,1,0,0,1,6,7,100000000,2000],[7,0,1,0,1,6,7],[8,1,0,0,1,8,9,100000000,13000],[9,0,1,0,1,8,9]]
+        #    topology = [ [[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+        #                 [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]],
+        #                 [[0,20000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1]],
+        #                 [[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1],[-1]],
+        #                 [[-1],[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1]],
+        #                 [[-1],[0,20000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1],[0,20000,10,128]],
+        #                 [[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+        #                 [[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
+        #                 [[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1]],
+        #                 [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]] ]
         
         if self.globs.TEST_CASE == 1:
-            nodes = [[1, 1, 0, 0, 1, 160000000, 0, 0], [1, 0, 1, 0, 1, 0, 0, 0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
+            nodes = [[0,1,0,0,1,0,1,160000000,0], [1,0,1,0,1,0,1],[2,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1]]
             topology = [ [[-1],[-1],[0,10000,10,64],[-1],[-1],[-1]], 
-                    [[-1],[-1],[-1],[-1],[-1],[0,10000,10,64]], 
-                    [[0, 15000, 10, 64],[-1],[-1],[1, 10000, 10, 64],[1, 10000, 10, 64],[-1]],
-                    [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
-                    [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
-                    [[-1],[0, 10000, 10, 64],[-1],[0, 10000, 10, 64],[0, 10000, 10, 64],[-1]] ]
+                         [[-1],[-1],[-1],[-1],[-1],[0,10000,10,64]], 
+                         [[0, 10000, 10, 64],[-1],[-1],[1, 10000, 10, 64],[1, 10000, 10, 64],[-1]],
+                         [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
+                         [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
+                         [[-1],[0, 10000, 10, 64],[-1],[0, 10000, 10, 64],[0, 10000, 10, 64],[-1]] ]
+                         
         elif self.globs.TEST_CASE == 2:
-            nodes = [[1,1,0,0,1,80000000,0,0],[1,0,1,0,1,0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[1,1,0,6,7,40000000,0,2000],[1,0,1,6,7,0,0,0],[1,1,0,8,9,40000000,0,4000],[1,0,1,8,9,0,0,0]]
-            topology = [ [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
-                        [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]],
-                        [[0,10000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1]],
-                        [[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1],[-1]],
-                        [[-1],[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1]],
-                        [[-1],[0,10000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1],[0,10000,10,128]],
-                        [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
-                        [[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
-                        [[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1]],
-                        [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]] ]
+            nodes = [[0,1,0,0,1,0,1,160000000,0],[1,0,1,0,1,0,1],[2,0,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1],[6,1,0,0,1,6,7,100000000,2000],[7,0,1,0,1,6,7],[8,1,0,0,1,8,9,100000000,13000],[9,0,1,0,1,8,9]]
+            topology = [ [[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+                         [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]],
+                         [[0,20000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1]],
+                         [[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1],[-1]],
+                         [[-1],[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1]],
+                         [[-1],[0,20000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1],[0,20000,10,128]],
+                         [[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+                         [[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
+                         [[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1]],
+                         [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]] ]
         else:
             nodes = self.globs.TEST_CASE[0]
             topology = self.globs.TEST_CASE[1]
@@ -98,49 +99,54 @@ class Simulation():
         outputName += self.globs.CONGESTION_CONTROL_ALGORITHM
         
         # For each device in the nodes, instantiate the appropriate device with its monitors
-        for id in range(len(nodes)):
+        for i in range(len(nodes)):
             # If the device is a source ...
-            if nodes[id][1]:
+            if nodes[i][1]:
                 self.globs.numFlows += 1
                 
                 # Create the monitors
-                sendRateMonitor = Monitor(name = 'Send Rate of Source ' + str(id))
-                windowSizeMonitor = Monitor(name = 'Window Size of Source '+str(id))
+                sendRateMonitor = Monitor(name = 'Send Rate of Source ' + str(nodes[i][0]))
+                windowSizeMonitor = Monitor(name = 'Window Size of Source '+str(nodes[i][0]))
                 
                 # Create the object, add it to the list of devices, and activate it
-                source = Source(id, nodes[id][4], nodes[id][5], nodes[id][6], nodes[id][7], sendRateMonitor, windowSizeMonitor, self.globs)
+                source = Source(nodes[i][0], nodes[i][6], nodes[i][7], nodes[i][8], sendRateMonitor, windowSizeMonitor, self.globs)
                 devices.append(source)
                 activate(source, source.run())
                 
                 # If this node should be monitored, add its monitors to the arrays
-                if nodes[id][0]:
+                if nodes[i][4]:
                     sendRates.append(sendRateMonitor)
                     windowSizes.append(windowSizeMonitor)
                     
             # If the device is a destination ...        
-            elif nodes[id][2]:
+            elif nodes[i][2]:
                 
                 # Create the Monitors 
                 thru = Monitor(name = 'Throughput to Destination ' + str(id))
                 pDelay = Monitor(name = 'Packet Delays of Destination ' + str(id))
             
                 # Create the object, add it to the list of devices, and activate it
-                dest = Destination(id, nodes[id][3], thru, pDelay, self.globs)
+                dest = Destination(nodes[i][0], nodes[i][5], thru, pDelay, self.globs)
                 devices.append(dest)
                 activate(dest, dest.run())
                 
                 # If this node should be monitored, add its monitors to the arrays
-                if nodes[id][0]:
+                if nodes[i][4]:
                     packetDelays.append(pDelay)
                     throughputs.append(thru)
         
-            # Otherwise the device is a router ...
-            else:
+            # If the device is a router ...
+            elif nodes[i][3]:
                 
                 # Create the object, add it to the list of devices, and activate it
-                router = Router(id,topology, self.globs)
+                router = Router(nodes[i][0],topology, self.globs)
                 devices.append(router)
                 activate(router, router.run())
+            
+            # Otherwise the input is incorrect ...
+            else:
+                print("Incorrect Input: One of the nodes is not a source, destination, or router.")
+                assert(False)
                                     
         # For each link in the topology, instantiate the appropriate link with its monitors
         for i in range(len(topology)):
