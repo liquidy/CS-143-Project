@@ -17,6 +17,9 @@ class Global():
         self.CONGESTION_CONTROL_ALGORITHM = "VEGAS"
 
         self.TEST_CASE = 1
+        self.NODES = None
+        self.TOPOLOGY = None
+        
         self.THROUGHPUT_AVERAGE = 200
         
     def __str__(self):
@@ -55,17 +58,26 @@ class Global():
         if len(cmd) == 2:
             (param, value) = cmd
             if param in self.__dict__:
+                
                 if param == 'DYNAMIC_ROUTING':
                     if value in ['True', 'False']:
                         self.__dict__[param] = eval(value)
+                        
                 elif param == 'CONGESTION_CONTROL_ALGORITHM':
                     if value in ['VEGAS', 'AIMD', 'RENO']:
                         if value == 'RENO':
                             value = 'AIMD'
                         self.__dict__[param] = value
+                        
+                elif param == 'TEST_CASE' and value == 'CUSTOM':
+                    self.__dict__[param] = value
+                        
+                # This case covers all parameters which can be integers.
                 elif value.isdigit():
                     if param != 'TEST_CASE' or value in ['1', '2']:
                         self.__dict__[param] = int(value)
+                        
+                # This case covers parameters which can also be floats.
                 elif param in ['DEFAULT_ALPHA', 'PROBE_RATE', 'PROBE_DROP_DELAY', 'ACK_TIMEOUT']:
                     isFloat = True
                     for part in ('0'+value).split('.', 1):
