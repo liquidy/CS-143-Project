@@ -233,7 +233,7 @@ class Simulation():
             times = m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL]
             intervals = [a-b for a,b in zip(times[1:len(times)],times[0:len(times)-1])]
             timeavDelay = [a*b for a,b in zip(delay[0:len(delay)-1],intervals)]
-            print("Average of "+ m.name + " is " + str(sum(timeavDelay)/float(sum(m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL]))))
+            print("Average of "+ m.name + " is " + str(sum(timeavDelay)/float(sum(intervals))))
             plt.plot(m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL], delay)
             plt.title(m.name)
             plt.xlabel("Packet Delay (ms)")
