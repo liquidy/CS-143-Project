@@ -1,4 +1,4 @@
-----CS 143 Project----
+---- CS 143 Project ----
 
 December 8, 2011
 
@@ -68,7 +68,7 @@ by editing Global.py.  The configuration parameters are:
            it contains only [ID, isSource, isDestination, isRouter].
     
     TOPOLOGY: This is a matrix that stores the data for the links. If there are n nodes, then topology will be an 
-              n x n matrix. The (i,j)th entry of TOPOLOGY is [-1] if there is no link between devices with ids 
+              n x n matrix. The (i,j)-th entry of TOPOLOGY is [-1] if there is no link between devices with ids 
               i and j, and [isMonitored, rate, propogationTime bufferCapacity] if there is a link between devices 
               i and j.
 
@@ -88,4 +88,4 @@ Each graph is saved as a .png image with a name indicating which test case was u
 dynamic routing was used, which congestion control algorithm was used, and what is shown on
 the graph.
 
----- END README----
+---- END README ----
