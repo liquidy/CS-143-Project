@@ -57,6 +57,8 @@ class Simulation():
                          [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
                          [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
                          [[-1],[0, 10000, 10, 64],[-1],[0, 10000, 10, 64],[0, 10000, 10, 64],[-1]] ]
+            self.globs.NODES = nodes
+            self.globs.TOPOLOGY = topology
                          
         elif self.globs.TEST_CASE == 2:
             nodes = [[0,1,0,0,1,0,1,160000000,0],[1,0,1,0,1,0,1],[2,0,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1],[6,1,0,0,1,6,7,100000000,2000],[7,0,1,0,1,6,7],[8,1,0,0,1,8,9,100000000,13000],[9,0,1,0,1,8,9]]
@@ -70,10 +72,12 @@ class Simulation():
                          [[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
                          [[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1]],
                          [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]] ]
+            self.globs.NODES = nodes
+            self.globs.TOPOLOGY = topology
+            
         else:
-            nodes = self.globs.TEST_CASE[0]
-            topology = self.globs.TEST_CASE[1]
-        self.globs.nodes = nodes
+            nodes = self.globs.NODES
+            topology = self.globs.TOPOLOGY
         
         # Global Arrays of the Network Objects. Devices includes all the Sources, Destinations, and Routers, and links includes all the link objects.
         devices = []
