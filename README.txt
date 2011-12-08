@@ -9,7 +9,7 @@ Authors:
  Judy Mou
  Kevin Lo
 
-=============================================================================================
+====================================================================================================================
 
 The simulator can be configured during runtime by following the instructions
 presented on your terminal.  The default parameter values can only be changed
@@ -72,11 +72,11 @@ by editing Global.py.  The configuration parameters are:
               i and j, and [isMonitored, rate, propogationTime bufferCapacity] if there is a link between devices 
               i and j.
 
-=============================================================================================
+====================================================================================================================
 
 To run the simulation, run Simulation.py and follow the instructions presented on your terminal.
 
-=============================================================================================
+====================================================================================================================
 
 Graphs are produced in the working directory for:
     
