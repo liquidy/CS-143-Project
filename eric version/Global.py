@@ -40,6 +40,10 @@ class Global():
     CONGESTION_CONTROL_ALGORITHM = %s
 
     TEST_CASE = %s
+        *custom test case info*
+        NODES = %s
+        TOPOLOGY = %s
+    
     THROUGHPUT_AVERAGE = %s'''\
         \
         % (self.PACKET_SIZE,\
@@ -47,19 +51,25 @@ class Global():
            self.DYNAMIC_ROUTING, self.PROBE_DROP_DELAY, self.PROBE_SAMPLE_SIZE,\
                self.PROBE_RATE,\
            self.DEFAULT_ALPHA, self.NUM_PACKETS_TO_TRACK_FOR_RTT, self.CONGESTION_CONTROL_ALGORITHM,\
-           self.TEST_CASE, self.THROUGHPUT_AVERAGE))
+           self.TEST_CASE, self.NODES, self.TOPOLOGY,\
+           self.THROUGHPUT_AVERAGE))
     
     def setParams(self, cmd):
         if cmd == 'ALL':
             for param in self.__dict__:
-                value = raw_input('\nEnter new value for %s (enter nothing to leave value unchanged):\n' % (param))
-                self.setParams('%s %s' % (param, value))
+                if param not in ['NODES', 'TOPOLOGY']:
+                    value = raw_input('\nEnter new value for %s (enter nothing to leave value unchanged):\n' % (param))
+                    self.setParams('%s %s' % (param, value))
         cmd = cmd.split(None, 1)
         if len(cmd) == 2:
             (param, value) = cmd
             if param in self.__dict__:
                 
-                if param == 'DYNAMIC_ROUTING':
+                # Disallow changes to these parameters
+                if param in ['NODES', 'TOPOLOGY']:
+                    pass
+                
+                elif param == 'DYNAMIC_ROUTING':
                     if value in ['True', 'False']:
                         self.__dict__[param] = eval(value)
                         
@@ -71,7 +81,7 @@ class Global():
                         
                 elif param == 'TEST_CASE' and value == 'CUSTOM':
                     self.__dict__[param] = value
-                        
+                
                 # This case covers all parameters which can be integers.
                 elif value.isdigit():
                     if param != 'TEST_CASE' or value in ['1', '2']:
