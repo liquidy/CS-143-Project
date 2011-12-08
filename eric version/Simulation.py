@@ -202,7 +202,7 @@ class Simulation():
             deltay = [a-b for a,b in zip(m.yseries()[2*self.globs.AVERAGE_INTERVAL:L],m.yseries()[0:L-2*self.globs.AVERAGE_INTERVAL])]
             deltax = [a-b for a,b in zip(m.tseries()[2*self.globs.AVERAGE_INTERVAL:L],m.tseries()[0:L-2*self.globs.AVERAGE_INTERVAL])]
             thru = [float(a)/b for a,b in zip(deltay,deltax)]
-            times = m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.gobs.AVERAGE_INTERVAL]
+            times = m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL]
             intervals = [a-b for a,b in zip(times[1:len(times)],times[0:len(times)-1])]
             timeavThru = [a*b for a,b in zip(thru[0:len(thru)-1],intervals)]
             print("The Average of " + m.name + " is " + str(sum(timeavThru) / float(sum(intervals))))
