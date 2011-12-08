@@ -48,7 +48,10 @@ by editing Global.py.  The configuration parameters are:
     NUM_PACKETS_TO_TRACK_FOR_RTT: number of packets whose RTT is averaged to
                                   determined how to adjust the window size in TCP VEGAS
                                   (integer)
-    THROUGHPUT_AVERAGE: The number of packets whose receiving times are averaged over to determine the throughput. 
+
+    THROUGHPUT_AVERAGE: The number of packets whose receiving times are averaged over to
+                        determine the throughput. 
+                        (integer)
 
     CONGESTION_CONTROL_ALGORITHM: "AIMD" or "VEGAS"
 
