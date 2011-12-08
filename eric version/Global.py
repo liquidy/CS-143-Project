@@ -7,16 +7,17 @@ class Global():
         self.THRESHOLD = 1
         self.ACK_TIMEOUT = 1000
 
-        self.DYNAMIC_ROUTING = False
-        self.PROBE_DROP_DELAY = 100
+        self.DYNAMIC_ROUTING = True
+        self.PROBE_DROP_DELAY = 1000
         self.PROBE_SAMPLE_SIZE = 50
         self.PROBE_RATE = 100
 
-        self.DEFAULT_ALPHA = .6
+        self.DEFAULT_ALPHA = .8
         self.NUM_PACKETS_TO_TRACK_FOR_RTT = 10
         self.CONGESTION_CONTROL_ALGORITHM = "VEGAS"
 
-        self.TEST_CASE = 2
+        self.TEST_CASE = 1
+        self.THROUGHPUT_AVERAGE = 200
         
     def __str__(self):
         return('''\
@@ -35,14 +36,15 @@ class Global():
     NUM_PACKETS_TO_TRACK_FOR_RTT = %s
     CONGESTION_CONTROL_ALGORITHM = %s
 
-    TEST_CASE = %s'''\
+    TEST_CASE = %s
+    THROUGHPUT_AVERAGE = %s'''\
         \
         % (self.PACKET_SIZE,\
            self.INIT_WINDOW_SIZE, self.THRESHOLD, self.ACK_TIMEOUT,\
            self.DYNAMIC_ROUTING, self.PROBE_DROP_DELAY, self.PROBE_SAMPLE_SIZE,\
                self.PROBE_RATE,\
            self.DEFAULT_ALPHA, self.NUM_PACKETS_TO_TRACK_FOR_RTT, self.CONGESTION_CONTROL_ALGORITHM,\
-           self.TEST_CASE))
+           self.TEST_CASE, self.THROUGHPUT_AVERAGE))
     
     def setParams(self, cmd):
         if cmd == 'ALL':
@@ -62,10 +64,11 @@ class Global():
                             value = 'AIMD'
                         self.__dict__[param] = value
                 elif value.isdigit():
-                    self.__dict__[param] = int(value)
+                    if param != 'TEST_CASE' or value in ['1', '2']:
+                        self.__dict__[param] = int(value)
                 elif param in ['DEFAULT_ALPHA', 'PROBE_RATE', 'PROBE_DROP_DELAY', 'ACK_TIMEOUT']:
                     isFloat = True
-                    for part in value.split('.', 1):
+                    for part in ('0'+value).split('.', 1):
                         if not part.isdigit():
                             isFloat = False
                     if isFloat:
