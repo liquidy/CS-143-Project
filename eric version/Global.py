@@ -5,14 +5,14 @@ class Global():
 
         self.INIT_WINDOW_SIZE = 1
         self.THRESHOLD = 1
-        self.ACK_TIMEOUT = 1000
+        self.ACK_TIMEOUT = 5000
 
         self.DYNAMIC_ROUTING = True
         self.PROBE_DROP_DELAY = 1000
         self.PROBE_SAMPLE_SIZE = 50
         self.PROBE_RATE = 100
 
-        self.DEFAULT_ALPHA = .8
+        self.DEFAULT_ALPHA = .35
         self.NUM_PACKETS_TO_TRACK_FOR_RTT = 10
         self.CONGESTION_CONTROL_ALGORITHM = "VEGAS"
 
