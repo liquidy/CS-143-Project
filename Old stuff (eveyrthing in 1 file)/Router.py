@@ -8,14 +8,16 @@ import sys
 PACKET_SIZE = 8000
 #INIT_WINDOW_SIZE = 1000
 INIT_WINDOW_SIZE = 1
-THRESHOLD = 80
+THRESHOLD = 50
 
-ACK_TIMEOUT = 1000 # NEED TO ESTIMATE LATER
+
+ACK_TIMEOUT = 5000 # NEED TO ESTIMATE LATER
 DYNAMIC_ROUTING = False
 PROBE_DROP_DELAY = 100
 PROBE_SAMPLE_SIZE = 50
+
 PROBE_RATE = 100
-DEFAULT_ALPHA = .6
+DEFAULT_ALPHA = .35
 NUM_PACKETS_TO_TRACK_FOR_RTT = 10
 THROUGHPUT_AVERAGE = 20
 CONGESTION_CONTROL_ALGORITHM = "AIMD"
@@ -645,7 +647,7 @@ class Source(Device):
                 # Enter Fast Recovery if necessary
                 self.fastRecovery = True
                 self.ssthresh = self.windowSize / 2
-                self.windowSize = self.ssthresh + 3
+                self.windowSize = self.ssthresh + 4
                 self.dupAcks = 0
                 
                 # Create a new packet based on the packetID, and resent the packet
@@ -756,7 +758,7 @@ class Source(Device):
             if not self.enabledCCA:
                 self.windowSize += 1
             elif self.congControlAlg == 'AIMD' and self.fastRecovery == False:            
-                self.windowSize += 1/float(math.floor(self.windowSize))
+                self.windowSize += 1/float(self.windowSize)
             elif self.congControlAlg == 'VEGAS' and self.fastRecovery == False:
                 packetRttTime = now() - self.timePacketWasSent[packet.packetID]
                 # Set rttMin if has not been set yet
@@ -770,16 +772,16 @@ class Source(Device):
                 self.rtt = sum(self.packetRttsToTrack) / len(self.packetRttsToTrack)
                 # Update window size accordingly
                 if (self.windowSize / self.rttMin - self.windowSize / self.rtt) < self.alpha:
-                    self.windowSize += 1
+                    self.windowSize += 1/float(self.windowSize)
                 else:
-                    self.windowSize -= 1
+                    self.windowSize -= 1/float(self.windowSize)
             # Get out fast recovery once missing packet was received
             elif self.fastRecovery and self.mostRecentAck < packet.packetID:
                 self.fastRecovery = False
                 self.windowSize = self.ssthresh
             # Duplicate Ack
             elif self.fastRecovery and self.mostRecentAck == packet.packetID:
-                self.windowSize += 1/float(math.floor(self.windowSize))
+                self.windowSize += 1
             else:
                 pass
                 
@@ -896,17 +898,17 @@ if TEST_CASE == 1:
              [[-1],[-1],[1, 10000, 10, 64],[-1],[-1],[0, 10000, 10, 64]], 
              [[-1],[0, 10000, 10, 64],[-1],[0, 10000, 10, 64],[0, 10000, 10, 64],[-1]] ]
 elif TEST_CASE == 2:
-    nodes = [[1,1,0,0,1,80000000,0,0],[1,0,1,0,1,0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[1,1,0,6,7,40000000,0,2000],[1,0,1,6,7,0,0,0],[1,1,0,8,9,40000000,0,4000],[1,0,1,8,9,0,0,0]]
-    topology = [ [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
-                 [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]],
-                 [[0,10000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1]],
-                 [[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1],[-1]],
-                 [[-1],[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,10000,10,128],[-1]],
-                 [[-1],[0,10000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1],[0,10000,10,128]],
-                 [[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
-                 [[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
-                 [[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1],[-1]],
-                 [[-1],[-1],[-1],[-1],[-1],[0,10000,10,128],[-1],[-1],[-1],[-1]] ]
+    nodes = [[1,1,0,0,1,160000000,0,0],[1,0,1,0,1,0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[1,1,0,6,7,100000000,0,2000],[1,0,1,6,7,0,0,0],[1,1,0,8,9,100000000,0,13000],[1,0,1,8,9,0,0,0]]
+    topology = [ [[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+                 [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]],
+                 [[0,20000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1]],
+                 [[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1],[-1]],
+                 [[-1],[-1],[-1],[1,10000,10,128],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1]],
+                 [[-1],[0,20000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[-1],[-1],[0,20000,10,128]],
+                 [[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
+                 [[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1]],
+                 [[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1]],
+                 [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]] ]
 
 
 # Global variables used to determine when to stop the simulation. 
