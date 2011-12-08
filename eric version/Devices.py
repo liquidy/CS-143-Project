@@ -158,8 +158,8 @@ class Destination(Device):
 
 class Source(Device):
 
-    def __init__(self, ID, destinationID, bitsToSend, congControlAlg, 
-                 startTime, sendRateMonitor, windowSizeMonitor, globs):
+    def __init__(self, ID, destinationID, bitsToSend, startTime, \
+                 sendRateMonitor, windowSizeMonitor, globs):
         
         # Call Device superclass
         Device.__init__(self, ID, globs)
