@@ -202,8 +202,10 @@ class Simulation():
             deltay = [a-b for a,b in zip(m.yseries()[2*self.globs.AVERAGE_INTERVAL:L],m.yseries()[0:L-2*self.globs.AVERAGE_INTERVAL])]
             deltax = [a-b for a,b in zip(m.tseries()[2*self.globs.AVERAGE_INTERVAL:L],m.tseries()[0:L-2*self.globs.AVERAGE_INTERVAL])]
             thru = [float(a)/b for a,b in zip(deltay,deltax)]
-            timeavThru = [a*b for a,b in zip(thru,m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL])]
-            print("The Average of " + m.name + " is " + str(sum(timeavThru) / float(sum(m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL]))))
+            times = m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.gobs.AVERAGE_INTERVAL]
+            intervals = [a-b for a,b in zip(times[1:len(times)],times[0:len(times)-1])]
+            timeavThru = [a*b for a,b in zip(thru[0:len(thru)-1],intervals)]
+            print("The Average of " + m.name + " is " + str(sum(timeavThru) / float(sum(intervals))))
             plt.plot(m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL], thru)
             plt.title(m.name)
             plt.xlabel("Time (ms)")
@@ -228,7 +230,9 @@ class Simulation():
         for m in packetDelays:
             L = len(m.yseries())
             delay = [(a-b)/float(self.globs.AVERAGE_INTERVAL) for a,b in zip(m.yseries()[2*self.globs.AVERAGE_INTERVAL:L],m.yseries()[0:L-2*self.globs.AVERAGE_INTERVAL])]
-            timeavDelay = [a*b for a,b in zip(thru,m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL])]
+            times = m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL]
+            intervals = [a-b for a,b in zip(times[1:len(times)],times[0:len(times)-1])]
+            timeavDelay = [a*b for a,b in zip(delay[0:len(delay)-1],intervals)]
             print("Average of "+ m.name + " is " + str(sum(timeavDelay)/float(sum(m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL]))))
             plt.plot(m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL], delay)
             plt.title(m.name)
