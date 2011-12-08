@@ -48,15 +48,22 @@ by editing Global.py.  The configuration parameters are:
     NUM_PACKETS_TO_TRACK_FOR_RTT: number of packets whose RTT is averaged to
                                   determined how to adjust the window size in TCP VEGAS
                                   (integer)
-    THROUGHPUT_AVERAGE: 
+    THROUGHPUT_AVERAGE: The number of packets whose receiving times are averaged over to determine the throughput. 
 
     CONGESTION_CONTROL_ALGORITHM: "AIMD" or "VEGAS"
 
     TEST_CASE: 1 or 2 for the required test cases
 
-________________________________________________________________________________
-____TODO: explain input format__________________________________________________
-________________________________________________________________________________
+    NODES: This is an array holding the data for the flows and routers. Each elemet of NODES is an array containing
+           the data, [ID, isSource, isDestination, isRouter, isMonitored, sourceID, destID, bitsToSend, startTime].
+           If the device is a source, it contains all these fields. If it is a Destination, it contains only the 
+           fields [ID, isSource, isDestination, isRouter, isMonitored, sourceID, destID], and if it is a Router,
+           it contains only [ID, isSource, isDestination, isRouter].
+    
+    TOPOLOGY: This is a matrix that stores the data for the links. If there are n nodes, then topology will be an 
+              n x n matrix. The (i,j)th entry of TOPOLOGY is [-1] if there is no link between devices with ids 
+              i and j, and [isMonitored, rate, propogationTime bufferCapacity] if there is a link between devices 
+              i and j.
 
 =============================================================================================
 
