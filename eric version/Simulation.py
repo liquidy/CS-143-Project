@@ -61,7 +61,7 @@ class Simulation():
             self.globs.TOPOLOGY = TOPOLOGY
                          
         elif self.globs.TEST_CASE == 2:
-            NODES = [[0,1,0,0,1,0,1,160000000,0],[1,0,1,0,1,0,1],[2,0,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1],[6,1,0,0,1,6,7,100000000,2000],[7,0,1,0,1,6,7],[8,1,0,0,1,8,9,100000000,13000],[9,0,1,0,1,8,9]]
+            NODES = [[0,1,0,0,1,0,1,160000000,0],[1,0,1,0,1,0,1],[2,0,0,1],[3,0,0,1],[4,0,0,1],[5,0,0,1],[6,1,0,0,1,6,7,100000000,2000],[7,0,1,0,1,6,7],[8,1,0,0,1,8,9,100000000,13000],[9,0,1,0,1,8,9]]
             TOPOLOGY = [ [[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1],[-1],[-1],[-1]],
                          [[-1],[-1],[-1],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1],[-1]],
                          [[0,20000,10,128],[-1],[-1],[1,10000,10,128],[-1],[-1],[0,20000,10,128],[-1],[-1],[-1]],
@@ -126,8 +126,8 @@ class Simulation():
             elif NODES[i][2]:
                 
                 # Create the Monitors 
-                thru = Monitor(name = 'Throughput to Destination ' + str(id))
-                pDelay = Monitor(name = 'Packet Delays of Destination ' + str(id))
+                thru = Monitor(name = 'Throughput to Destination ' + str(i))
+                pDelay = Monitor(name = 'Packet Delays of Destination ' + str(i))
             
                 # Create the object, add it to the list of devices, and activate it
                 dest = Destination(NODES[i][0], NODES[i][5], thru, pDelay, self.globs)
@@ -199,12 +199,12 @@ class Simulation():
         n = 0
         for m in throughputs:
             L = len(m.yseries())
-            deltay = [a-b for a,b in zip(m.yseries()[2*self.globs.THROUGHPUT_AVERAGE:L],m.yseries()[0:L-2*self.globs.THROUGHPUT_AVERAGE])]
-            deltax = [a-b for a,b in zip(m.tseries()[2*self.globs.THROUGHPUT_AVERAGE:L],m.tseries()[0:L-2*self.globs.THROUGHPUT_AVERAGE])]
+            deltay = [a-b for a,b in zip(m.yseries()[2*self.globs.AVERAGE_INTERVAL:L],m.yseries()[0:L-2*self.globs.AVERAGE_INTERVAL])]
+            deltax = [a-b for a,b in zip(m.tseries()[2*self.globs.AVERAGE_INTERVAL:L],m.tseries()[0:L-2*self.globs.AVERAGE_INTERVAL])]
             thru = [float(a)/b for a,b in zip(deltay,deltax)]
-            timeavThru = [a*b for a,b in zip(thru,m.tseries()[self.globs.THROUGHPUT_AVERAGE:L-self.globs.THROUGHPUT_AVERAGE])]
-            print("The Average of " + m.name + " is " + timeavThru/float(sum(m.tseries()[self.globs.THROUGHPUT_AVERAGE:L-self.globs.THROUGHPUT_AVERAGE])))
-            plt.plot(m.tseries()[self.globs.THROUGHPUT_AVERAGE:L-self.globs.THROUGHPUT_AVERAGE], thru)
+            timeavThru = [a*b for a,b in zip(thru,m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL])]
+            print("The Average of " + m.name + " is " + str(sum(timeavThru) / float(sum(m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL]))))
+            plt.plot(m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL], thru)
             plt.title(m.name)
             plt.xlabel("Time (ms)")
             plt.ylabel("Throughput (bpms)")
@@ -226,8 +226,11 @@ class Simulation():
         # Packet Delays
         n = 0
         for m in packetDelays:
-            print("Average of "+ m.name + " is " + m.timeAverage())
-            plt.plot(m.tseries(), m.yseries())
+            L = len(m.yseries())
+            delay = [(a-b)/float(self.globs.AVERAGE_INTERVAL) for a,b in zip(m.yseries()[2*self.globs.AVERAGE_INTERVAL:L],m.yseries()[0:L-2*self.globs.AVERAGE_INTERVAL])]
+            timeavDelay = [a*b for a,b in zip(thru,m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL])]
+            print("Average of "+ m.name + " is " + str(sum(timeavDelay)/float(sum(m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL]))))
+            plt.plot(m.tseries()[self.globs.AVERAGE_INTERVAL:L-self.globs.AVERAGE_INTERVAL], delay)
             plt.title(m.name)
             plt.xlabel("Packet Delay (ms)")
             plt.ylabel("Time (ms)")
@@ -238,8 +241,8 @@ class Simulation():
         # Buffer Occupancies    
         n = 0
         for m in bufferOccs:
-            print("Average of "+ m.name + " is " + m.timeAverage())
-            print("Variance of "+m.name + " is " + m.timeVariance())
+            print("Average of "+ m.name + " is " + str(m.timeAverage()))
+            print("Variance of "+m.name + " is " + str(m.timeVariance()))
             plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
             plt.xlabel("Time (ms)")
@@ -251,7 +254,7 @@ class Simulation():
         # Dropped Packets    
         n = 0
         for m in droppedPackets:
-            print("Average of "+m.name + " is " + m.timeAverage())
+            print("Average of "+m.name + " is " + str(m.timeAverage()))
             plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
             plt.xlabel("Time (ms)")
@@ -263,7 +266,7 @@ class Simulation():
         # Link Flow Rates    
         n = 0
         for m in linkFlowRates:
-            plt.plot(m.tseries(), m.yseries(),'o')
+            plt.plot(m.tseries(), m.yseries())
             plt.title(m.name)
             plt.xlabel("Time (ms)")
             plt.ylabel("Link Flow (bpms)")
