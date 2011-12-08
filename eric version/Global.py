@@ -4,7 +4,7 @@ class Global():
         self.PACKET_SIZE = 8000
 
         self.INIT_WINDOW_SIZE = 1
-        self.THRESHOLD = 1
+        self.THRESHOLD = 100
         self.ACK_TIMEOUT = 5000
 
         self.DYNAMIC_ROUTING = True
@@ -20,7 +20,7 @@ class Global():
         self.NODES = None
         self.TOPOLOGY = None
         
-        self.THROUGHPUT_AVERAGE = 200
+        self.AVERAGE_INTERVAL = 200
         
     def __str__(self):
         return('''\
@@ -44,7 +44,7 @@ class Global():
         NODES = %s
         TOPOLOGY = %s
     
-    THROUGHPUT_AVERAGE = %s'''\
+    AVERAGE_INTERVAL = %s'''\
         \
         % (self.PACKET_SIZE,\
            self.INIT_WINDOW_SIZE, self.THRESHOLD, self.ACK_TIMEOUT,\
@@ -52,7 +52,7 @@ class Global():
                self.PROBE_RATE,\
            self.DEFAULT_ALPHA, self.NUM_PACKETS_TO_TRACK_FOR_RTT, self.CONGESTION_CONTROL_ALGORITHM,\
            self.TEST_CASE, self.NODES, self.TOPOLOGY,\
-           self.THROUGHPUT_AVERAGE))
+           self.AVERAGE_INTERVAL))
     
     def setParams(self, cmd):
         if cmd == 'ALL':
